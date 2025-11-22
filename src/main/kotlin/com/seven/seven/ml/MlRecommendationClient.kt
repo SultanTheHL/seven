@@ -3,6 +3,7 @@ package com.seven.seven.ml
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.external.ExternalApiException
 import com.seven.seven.ml.model.MlRecommendationResponse
+import com.seven.seven.ml.model.MlVehicleCandidate
 import com.seven.seven.ml.model.PersonalInfoPayload
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -18,20 +19,34 @@ class MlRecommendationClient(
     private val logger = LoggerFactory.getLogger(MlRecommendationClient::class.java)
 
     fun requestRecommendation(payload: PersonalInfoPayload): MlRecommendationResponse {
-        val uri = URI.create(properties.ml.recommendationUrl)
-        logger.info("Calling ML recommendation service at {}", uri)
-
-        return runCatching {
-            restClient.post()
-                .uri(uri)
-                .body(payload)
-                .retrieve()
-                .body(MlRecommendationResponse::class.java)
-                ?: throw ExternalApiException("ML service returned empty response")
-        }.getOrElse { throwable ->
-            logger.error("ML recommendation service call failed: {}", throwable.message)
-            throw ExternalApiException("Unable to call ML recommendation service", throwable)
-        }
+//        val uri = URI.create(properties.ml.recommendationUrl)
+//        logger.info("Calling ML recommendation service at {}", uri)
+//
+//        return runCatching {
+//            restClient.post()
+//                .uri(uri)
+//                .body(payload)
+//                .retrieve()
+//                .body(MlRecommendationResponse::class.java)
+//                ?: throw ExternalApiException("ML service returned empty response")
+//        }.getOrElse { throwable ->
+//            logger.error("ML recommendation service call failed: {}", throwable.message)
+//            throw ExternalApiException("Unable to call ML recommendation service", throwable)
+//        }
+        logger.info("Returning mocked ML recommendation response")
+        return MlRecommendationResponse(
+            highwayPercent = 0.6,
+            maxSlope = 5.2,
+            totalAscent = 150.0,
+            totalDescent = 120.0,
+            averageSlope = 2.1,
+            riskScore = 0.35,
+            vehicles = listOf(
+                MlVehicleCandidate(id = "vehicle-1", rank = 1),
+                MlVehicleCandidate(id = "vehicle-2", rank = 2),
+                MlVehicleCandidate(id = "vehicle-3", rank = 3)
+            )
+        )
     }
 }
 
