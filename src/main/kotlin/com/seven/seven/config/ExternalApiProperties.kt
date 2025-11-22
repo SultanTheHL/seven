@@ -9,6 +9,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 class ExternalApiProperties {
     var google: Google = Google()
     var weather: Weather = Weather()
+    var ml: Ml = Ml()
+    var overpass: Overpass = Overpass()
     
     private val logger = LoggerFactory.getLogger(ExternalApiProperties::class.java)
 
@@ -33,6 +35,23 @@ class ExternalApiProperties {
         // 3. From environment variables
         // 4. From system properties
         
+        val mlRecommendationUrl = when {
+            ml.recommendationUrl.isNotBlank() && ml.recommendationUrl != DEFAULT_PLACEHOLDER_URL -> null
+            dotenv?.get("ML_RECOMMENDER_URL") != null -> {
+                logger.info("Loading ML endpoint from .env file")
+                dotenv.get("ML_RECOMMENDER_URL")
+            }
+            System.getenv("ML_RECOMMENDER_URL") != null -> {
+                logger.info("Loading ML endpoint from environment variable")
+                System.getenv("ML_RECOMMENDER_URL")
+            }
+            System.getProperty("ML_RECOMMENDER_URL") != null -> {
+                logger.info("Loading ML endpoint from system property")
+                System.getProperty("ML_RECOMMENDER_URL")
+            }
+            else -> null
+        }
+
         val googleApiKey = when {
             google.apiKey.isNotBlank() -> {
                 logger.info("Google API Key already set from application.properties")
@@ -86,22 +105,38 @@ class ExternalApiProperties {
         if (weatherApiKey != null) {
             weather = weather.copy(apiKey = weatherApiKey)
         }
+
+        if (mlRecommendationUrl != null) {
+            ml = ml.copy(recommendationUrl = mlRecommendationUrl)
+        }
         
         logger.info("Final Google API Key: ${if (google.apiKey.isNotBlank()) "SET (length: ${google.apiKey.length}, last 4: ${google.apiKey.takeLast(4)})" else "NOT SET - THIS WILL CAUSE ERRORS!"}")
         logger.info("Final Weather API Key: ${if (weather.apiKey.isNotBlank()) "SET (length: ${weather.apiKey.length}, last 4: ${weather.apiKey.takeLast(4)})" else "NOT SET - THIS WILL CAUSE ERRORS!"}")
+        logger.info("ML recommendation endpoint: ${ml.recommendationUrl}")
         logger.info("=== End External API Properties Initialization ===")
     }
 
     data class Google(
         val apiKey: String = "",
         val directionsUrl: String = "https://maps.googleapis.com/maps/api/directions/json",
-        val elevationUrl: String = "https://maps.googleapis.com/maps/api/elevation/json",
-        val roadsUrl: String = "https://roads.googleapis.com/v1/snapToRoads"
+        val elevationUrl: String = "https://maps.googleapis.com/maps/api/elevation/json"
     )
 
     data class Weather(
         val apiKey: String = "",
         val forecastUrl: String = "https://api.openweathermap.org/data/2.5/forecast"
     )
+
+    data class Ml(
+        val recommendationUrl: String = DEFAULT_PLACEHOLDER_URL
+    )
+
+    data class Overpass(
+        val url: String = "https://overpass-api.de/api/interpreter"
+    )
+
+    companion object {
+        private const val DEFAULT_PLACEHOLDER_URL = "http://localhost:5001/api/recommendations"
+    }
 }
 

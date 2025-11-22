@@ -1,7 +1,5 @@
 package com.seven.seven.external
 
-import tools.jackson.databind.JsonNode
-import tools.jackson.databind.ObjectMapper
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.shared.model.GeoPoint
 import com.seven.seven.shared.util.PolylineDecoder
@@ -9,6 +7,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.util.UriComponentsBuilder
+import tools.jackson.databind.ObjectMapper
 
 @Component
 class GoogleDirectionsClient(
@@ -21,7 +20,7 @@ class GoogleDirectionsClient(
     fun fetchRoute(origin: GeoPoint, destination: GeoPoint, waypoints: List<GeoPoint>): DirectionsData {
         val apiKey = properties.google.apiKey
         logger.info("Making Google Directions API request with API key: ${if (apiKey.isNotBlank()) "SET (length: ${apiKey.length}, last 4: ${apiKey.takeLast(4)})" else "NOT SET - REQUEST WILL FAIL!"}")
-        
+
         val uri = UriComponentsBuilder.fromUriString(properties.google.directionsUrl)
             .queryParam("origin", origin.asQueryParam())
             .queryParam("destination", destination.asQueryParam())
@@ -33,7 +32,7 @@ class GoogleDirectionsClient(
             .queryParam("key", apiKey)
             .build(true)
             .toUri()
-        
+
         logger.debug("Google Directions API URL (key masked): ${uri.toString().replace(apiKey, "***")}")
 
         val response = runCatching {
@@ -62,7 +61,7 @@ class GoogleDirectionsClient(
         if (routes == null || !routes.isArray || routes.isEmpty) {
             throw ExternalApiException("Google Directions API returned no routes. Status: $status")
         }
-        
+
         val route = routes.firstOrNull()
             ?: throw ExternalApiException("Google Directions API returned empty routes array")
 
@@ -72,20 +71,23 @@ class GoogleDirectionsClient(
         }
 
         val decodedPoints = PolylineDecoder.decode(overviewPolyline)
-        val totalDistance = route.path("legs")
-            .sumOf { leg -> leg.path("distance").path("value").asDouble(0.0) }
+        val legs = route.path("legs")
+        val totalDistance = legs.sumOf { leg -> leg.path("distance").path("value").asDouble(0.0) }
+        val totalDurationSeconds = legs.sumOf { leg -> leg.path("duration").path("value").asDouble(0.0) }
 
         return DirectionsData(
             polyline = overviewPolyline,
             points = decodedPoints,
-            totalDistanceMeters = totalDistance
+            totalDistanceMeters = totalDistance,
+            totalDurationSeconds = totalDurationSeconds
         )
     }
 
     data class DirectionsData(
         val polyline: String,
         val points: List<GeoPoint>,
-        val totalDistanceMeters: Double
+        val totalDistanceMeters: Double,
+        val totalDurationSeconds: Double
     )
 
     private fun GeoPoint.asQueryParam(): String = "${this.lat},${this.lng}"
