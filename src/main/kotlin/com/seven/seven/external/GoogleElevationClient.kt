@@ -1,6 +1,7 @@
 package com.seven.seven.external
 
-import com.fasterxml.jackson.databind.JsonNode
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.ObjectMapper
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.shared.model.ElevationSample
 import com.seven.seven.shared.model.GeoPoint
@@ -8,11 +9,14 @@ import com.seven.seven.shared.util.GeoUtils
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.util.UriComponentsBuilder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @Component
 class GoogleElevationClient(
     private val restClient: RestClient,
-    private val properties: ExternalApiProperties
+    private val properties: ExternalApiProperties,
+    private val objectMapper: ObjectMapper
 ) {
 
     fun fetchSamples(points: List<GeoPoint>): List<ElevationSample> {
@@ -20,17 +24,21 @@ class GoogleElevationClient(
         val sampledPoints = downSample(points, MAX_LOCATIONS_PER_REQUEST)
         val locations = sampledPoints.joinToString("|") { "${it.lat},${it.lng}" }
 
-        val uri = UriComponentsBuilder.fromHttpUrl(properties.google.elevationUrl)
-            .queryParam("locations", locations)
+        // URL encode the locations parameter manually since it contains '|' characters
+        val encodedLocations = URLEncoder.encode(locations, StandardCharsets.UTF_8)
+        
+        val uri = UriComponentsBuilder.fromUriString(properties.google.elevationUrl)
+            .queryParam("locations", encodedLocations)
             .queryParam("key", properties.google.apiKey)
             .build(true)
             .toUri()
 
         val response = runCatching {
-            restClient.get()
+            val body = restClient.get()
                 .uri(uri)
                 .retrieve()
-                .body(JsonNode::class.java)
+                .body(String::class.java)
+            objectMapper.readTree(body)
         }.getOrElse { throw ExternalApiException("Unable to call Google Elevation API", it) }
 
         val results = response?.path("results") ?: throw ExternalApiException("Elevation API returned no results")

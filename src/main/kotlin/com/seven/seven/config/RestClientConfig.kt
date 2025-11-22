@@ -1,5 +1,6 @@
 package com.seven.seven.config
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.web.client.RestClient
@@ -8,6 +9,9 @@ import org.springframework.web.client.RestClient
 class RestClientConfig {
 
     @Bean
-    fun restClient(builder: RestClient.Builder): RestClient = builder.build()
+    fun restClient(): RestClient = RestClient.builder().build()
+
+    @Bean
+    fun objectMapper(): ObjectMapper = ObjectMapper()
 }
 
