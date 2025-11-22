@@ -62,15 +62,35 @@ data class PreferencesDto(
 
 data class VehicleDto(
     val id: String? = null,
-    val name: String? = null,
-    val category: String? = null,
-    val transmission: String? = null
+    val brand: String? = null,
+    val model: String? = null,
+    val acrissCode: String? = null,
+    val groupType: String? = null,
+    val transmissionType: String? = null,
+    val fuelType: String? = null,
+    val passengersCount: Int? = null,
+    val bagsCount: Int? = null,
+    val isNewCar: Boolean? = null,
+    val isRecommended: Boolean? = null,
+    val isMoreLuxury: Boolean? = null,
+    val isExcitingDiscount: Boolean? = null,
+    val vehicleCostValueEur: Double? = null
 ) {
     fun toPayload(): VehiclePayload = VehiclePayload(
         id = id,
-        name = name,
-        category = category,
-        transmission = transmission
+        brand = brand,
+        model = model,
+        acrissCode = acrissCode,
+        groupType = groupType,
+        transmissionType = transmissionType,
+        fuelType = fuelType,
+        passengersCount = passengersCount,
+        bagsCount = bagsCount,
+        isNewCar = isNewCar,
+        isRecommended = isRecommended,
+        isMoreLuxury = isMoreLuxury,
+        isExcitingDiscount = isExcitingDiscount,
+        vehicleCostValueEur = vehicleCostValueEur
     )
 }
 

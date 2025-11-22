@@ -70,10 +70,34 @@ data class RoadCoordinatePayload(
 )
 
 data class VehiclePayload(
+    @JsonProperty("id")
     val id: String? = null,
-    val name: String? = null,
-    val category: String? = null,
-    val transmission: String? = null
+    @JsonProperty("brand")
+    val brand: String? = null,
+    @JsonProperty("model")
+    val model: String? = null,
+    @JsonProperty("acriss_code")
+    val acrissCode: String? = null,
+    @JsonProperty("group_type")
+    val groupType: String? = null,
+    @JsonProperty("transmission_type")
+    val transmissionType: String? = null,
+    @JsonProperty("fuel_type")
+    val fuelType: String? = null,
+    @JsonProperty("passengers_count")
+    val passengersCount: Int? = null,
+    @JsonProperty("bags_count")
+    val bagsCount: Int? = null,
+    @JsonProperty("is_new_car")
+    val isNewCar: Boolean? = null,
+    @JsonProperty("is_recommended")
+    val isRecommended: Boolean? = null,
+    @JsonProperty("is_more_luxury")
+    val isMoreLuxury: Boolean? = null,
+    @JsonProperty("is_exciting_discount")
+    val isExcitingDiscount: Boolean? = null,
+    @JsonProperty("vehicle_cost_value_eur")
+    val vehicleCostValueEur: Double? = null
 )
 
 data class MlRecommendationResponse(
