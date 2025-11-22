@@ -24,7 +24,7 @@ class OpenWeatherClient(
 
     fun fetchSnapshots(points: List<GeoPoint>, travelInstant: Instant): List<WeatherSnapshot> {
         if (points.isEmpty()) return emptyList()
-        val sampledPoints = pointsToCheck(points)
+        val sampledPoints = points.distinct()
         return sampledPoints.mapNotNull { point ->
             runCatching { fetchSnapshot(point, travelInstant) }.getOrNull()
         }
@@ -140,15 +140,6 @@ class OpenWeatherClient(
         "mist", "fog" -> WeatherType.FOG
         "squall", "tornado" -> WeatherType.EXTREME
         else -> WeatherType.UNKNOWN
-    }
-
-    private fun pointsToCheck(points: List<GeoPoint>): List<GeoPoint> {
-        val unique = points.distinct()
-        if (unique.size <= 3) return unique
-        val first = unique.first()
-        val middle = unique[unique.size / 2]
-        val last = unique.last()
-        return listOf(first, middle, last)
     }
 }
 

@@ -50,13 +50,23 @@ class RouteInsightsService(
         travelInstant: Instant,
         points: List<GeoPoint>
     ): WeatherSnapshot {
-        return snapshots.firstOrNull()
-            ?: WeatherSnapshot(
-                point = points.first(),
-                instant = travelInstant,
-                condition = WeatherSnapshotFallback.condition,
-                metrics = WeatherSnapshotFallback.metrics
-            )
+        val worstSnapshot = snapshots.maxByOrNull { calculateRiskScore(it) }
+        return worstSnapshot ?: WeatherSnapshot(
+            point = points.first(),
+            instant = travelInstant,
+            condition = WeatherSnapshotFallback.condition,
+            metrics = WeatherSnapshotFallback.metrics
+        )
+    }
+
+    private fun calculateRiskScore(snapshot: WeatherSnapshot): Double {
+        val metrics = snapshot.metrics
+        val severityScore = snapshot.condition.severity.weight * 100
+        val precipitationScore = (metrics.rainVolumeLastHour + metrics.snowVolumeLastHour) * 10
+        val windScore = metrics.windSpeedMetersPerSecond
+        val visibilityPenalty = (MAX_VISIBILITY_METERS - metrics.visibilityMeters)
+            .coerceAtLeast(0) / 100.0
+        return severityScore + precipitationScore + windScore + visibilityPenalty
     }
 
     data class RouteInsightsRequest(
@@ -87,11 +97,12 @@ class RouteInsightsService(
             windSpeedMetersPerSecond = 2.0,
             rainVolumeLastHour = 0.0,
             snowVolumeLastHour = 0.0,
-            visibilityMeters = 10000
+            visibilityMeters = MAX_VISIBILITY_METERS
         )
     }
     companion object {
         private const val DEFAULT_SPEED_KPH = 50.0
+        private const val MAX_VISIBILITY_METERS = 10000
     }
 }
 
