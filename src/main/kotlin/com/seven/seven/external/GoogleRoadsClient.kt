@@ -1,17 +1,21 @@
 package com.seven.seven.external
 
-import com.fasterxml.jackson.databind.JsonNode
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.ObjectMapper
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.shared.model.GeoPoint
 import com.seven.seven.shared.model.RoadType
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.util.UriComponentsBuilder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @Component
 class GoogleRoadsClient(
     private val restClient: RestClient,
-    private val properties: ExternalApiProperties
+    private val properties: ExternalApiProperties,
+    private val objectMapper: ObjectMapper
 ) {
 
     fun classifyRoads(points: List<GeoPoint>): Map<RoadType, Double> {
@@ -19,18 +23,22 @@ class GoogleRoadsClient(
         val sampledPoints = downSample(points, MAX_PATH_POINTS)
         val path = sampledPoints.joinToString("|") { "${it.lat},${it.lng}" }
 
-        val uri = UriComponentsBuilder.fromHttpUrl(properties.google.roadsUrl)
-            .queryParam("path", path)
+        // URL encode the path parameter manually since it contains '|' characters
+        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        
+        val uri = UriComponentsBuilder.fromUriString(properties.google.roadsUrl)
+            .queryParam("path", encodedPath)
             .queryParam("interpolate", true)
             .queryParam("key", properties.google.apiKey)
             .build(true)
             .toUri()
 
         val response = runCatching {
-            restClient.get()
+            val body = restClient.get()
                 .uri(uri)
                 .retrieve()
-                .body(JsonNode::class.java)
+                .body(String::class.java)
+            objectMapper.readTree(body)
         }.getOrElse { throw ExternalApiException("Unable to call Google Roads API", it) }
 
         val snappedPoints = response?.path("snappedPoints") ?: return defaultBreakdown()
@@ -75,7 +83,7 @@ class GoogleRoadsClient(
     private fun defaultBreakdown(): Map<RoadType, Double> = mapOf(RoadType.UNKNOWN to 1.0)
 
     companion object {
-        private const val MAX_PATH_POINTS = 100
+        private const val MAX_PATH_POINTS = 25
     }
 }
 

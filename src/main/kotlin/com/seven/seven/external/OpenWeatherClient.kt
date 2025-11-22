@@ -1,6 +1,7 @@
 package com.seven.seven.external
 
-import com.fasterxml.jackson.databind.JsonNode
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.ObjectMapper
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.shared.model.GeoPoint
 import com.seven.seven.shared.model.WeatherCondition
@@ -16,7 +17,8 @@ import java.time.Instant
 @Component
 class OpenWeatherClient(
     private val restClient: RestClient,
-    private val properties: ExternalApiProperties
+    private val properties: ExternalApiProperties,
+    private val objectMapper: ObjectMapper
 ) {
 
     fun fetchSnapshots(points: List<GeoPoint>, travelInstant: Instant): List<WeatherSnapshot> {
@@ -28,7 +30,7 @@ class OpenWeatherClient(
     }
 
     private fun fetchSnapshot(point: GeoPoint, travelInstant: Instant): WeatherSnapshot? {
-        val uri = UriComponentsBuilder.fromHttpUrl(properties.weather.forecastUrl)
+        val uri = UriComponentsBuilder.fromUriString(properties.weather.forecastUrl)
             .queryParam("lat", point.lat)
             .queryParam("lon", point.lng)
             .queryParam("appid", properties.weather.apiKey)
@@ -36,11 +38,15 @@ class OpenWeatherClient(
             .build(true)
             .toUri()
 
-        val response = restClient.get()
+        val body = restClient.get()
             .uri(uri)
             .retrieve()
-            .body(JsonNode::class.java)
+            .body(String::class.java)
             ?: return null
+        
+        val response = runCatching {
+            objectMapper.readTree(body)
+        }.getOrNull() ?: return null
 
         val listNode = response.path("list")
         if (!listNode.isArray || listNode.isEmpty) return null
