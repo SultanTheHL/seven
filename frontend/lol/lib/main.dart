@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/confidence_screen.dart';
 import 'screens/luggage_screen.dart';
 import 'screens/passenger_details_screen.dart';
+import 'screens/premium_upgrade_screen.dart';
 import 'screens/preference_screen.dart';
 import 'screens/priority_screen.dart';
 import 'screens/trip_plan_screen.dart';
@@ -44,6 +45,7 @@ class MyApp extends StatelessWidget {
         '/luggage': (_) => const LuggageScreen(),
         '/passengers': (_) => const PassengerDetailsScreen(),
         '/preference': (_) => const PreferenceScreen(),
+        '/upgrades': (_) => const PremiumUpgradeScreen(),
       },
     );
   }

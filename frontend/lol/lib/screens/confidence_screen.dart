@@ -111,10 +111,7 @@ class _ConfidenceScreenState extends State<ConfidenceScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
-                    '/passengers',
-                    (route) => false,
-                  ),
+                  onPressed: () => Navigator.of(context).pushNamed('/upgrades'),
                   style: ButtonStyle(
                     backgroundColor: MaterialStateProperty.resolveWith(
                       (states) {
