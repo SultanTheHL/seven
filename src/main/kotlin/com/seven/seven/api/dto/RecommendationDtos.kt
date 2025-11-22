@@ -1,14 +1,12 @@
 package com.seven.seven.api.dto
 
-import com.seven.seven.shared.model.ConfidenceLevel
+import com.seven.seven.ml.model.MlRecommendationResponse
+import com.seven.seven.ml.model.VehiclePayload
 import com.seven.seven.shared.model.GeoPoint
-import com.seven.seven.shared.model.PreferenceFocus
-import com.seven.seven.shared.model.ProtectionRecommendation
-import com.seven.seven.shared.model.RecommendedVehicle
-import com.seven.seven.shared.model.UserPreferences
-import com.seven.seven.shared.model.VehicleRecommendation
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.time.Instant
@@ -33,7 +31,6 @@ data class RecommendationRequestDto(
     fun originPoint(): GeoPoint = origin.toGeoPoint()
     fun destinationPoint(): GeoPoint = destination.toGeoPoint()
     fun waypointPoints(): List<GeoPoint> = waypoints.map { it.toGeoPoint() }
-    fun toPreferences(): UserPreferences = preferences.toModel()
 }
 
 data class CoordinateDto(
@@ -44,76 +41,67 @@ data class CoordinateDto(
 }
 
 data class PreferencesDto(
-    val numTravellers: Int,
-    val numBags: Int,
-    val focus: String,
-    val kids: Boolean = false,
-    val confidenceInBadWeather: String = "medium",
-    val automaticPreferred: Boolean = true
+    @field:Min(1)
+    val peopleCount: Int,
+    @field:Min(0)
+    val luggageBigCount: Int,
+    @field:Min(0)
+    val luggageSmallCount: Int,
+    @field:NotBlank
+    val preference: String,
+    @field:Min(0)
+    @field:Max(2)
+    val automatic: Int,
+    @field:NotBlank
+    val drivingSkills: String,
+    @field:Valid
+    val currentVehicle: VehicleDto? = null
 ) {
-    fun toModel(): UserPreferences = UserPreferences(
-        numTravellers = numTravellers,
-        numBags = numBags,
-        focus = focus.toPreferenceFocus(),
-        travelingWithKids = kids,
-        confidenceInBadWeather = confidenceInBadWeather.toConfidence(),
-        automaticPreferred = automaticPreferred
+    fun toVehiclePayload(): VehiclePayload? = currentVehicle?.toPayload()
+}
+
+data class VehicleDto(
+    val id: String? = null,
+    val brand: String? = null,
+    val model: String? = null,
+    val acrissCode: String? = null,
+    val groupType: String? = null,
+    val transmissionType: String? = null,
+    val fuelType: String? = null,
+    val passengersCount: Int? = null,
+    val bagsCount: Int? = null,
+    val isNewCar: Boolean? = null,
+    val isRecommended: Boolean? = null,
+    val isMoreLuxury: Boolean? = null,
+    val isExcitingDiscount: Boolean? = null,
+    val vehicleCostValueEur: Double? = null
+) {
+    fun toPayload(): VehiclePayload = VehiclePayload(
+        id = id,
+        brand = brand,
+        model = model,
+        acrissCode = acrissCode,
+        groupType = groupType,
+        transmissionType = transmissionType,
+        fuelType = fuelType,
+        passengersCount = passengersCount,
+        bagsCount = bagsCount,
+        isNewCar = isNewCar,
+        isRecommended = isRecommended,
+        isMoreLuxury = isMoreLuxury,
+        isExcitingDiscount = isExcitingDiscount,
+        vehicleCostValueEur = vehicleCostValueEur
     )
 }
 
-fun String.toPreferenceFocus(): PreferenceFocus = PreferenceFocus.entries
-    .firstOrNull { it.name.equals(this, ignoreCase = true) }
-    ?: PreferenceFocus.COMFORT
-
-fun String.toConfidence(): ConfidenceLevel = ConfidenceLevel.entries
-    .firstOrNull { it.name.equals(this, ignoreCase = true) }
-    ?: ConfidenceLevel.MEDIUM
-
 data class RecommendationResponseDto(
-    val recommendedVehicle: RecommendedVehicleDto,
-    val protectionRecommendation: ProtectionRecommendationDto?
+    val vehicleId: String,
+    val feedback: String
 ) {
     companion object {
-        fun from(recommendation: VehicleRecommendation) = RecommendationResponseDto(
-            recommendedVehicle = RecommendedVehicleDto.from(recommendation.recommendedVehicle),
-            protectionRecommendation = recommendation.protectionRecommendation?.let {
-                ProtectionRecommendationDto.from(it)
-            }
+        fun from(response: MlRecommendationResponse) = RecommendationResponseDto(
+            vehicleId = response.vehicleId,
+            feedback = response.feedback
         )
     }
 }
-
-data class RecommendedVehicleDto(
-    val group: String,
-    val modelExample: String,
-    val reasons: List<String>,
-    val upgradeOptions: List<UpgradeOptionDto>
-) {
-    companion object {
-        fun from(vehicle: RecommendedVehicle) = RecommendedVehicleDto(
-            group = vehicle.group,
-            modelExample = vehicle.modelExample,
-            reasons = vehicle.reasons,
-            upgradeOptions = vehicle.upgradeOptions.map { UpgradeOptionDto(it.group, it.modelExample, it.priceDelta) }
-        )
-    }
-}
-
-data class UpgradeOptionDto(
-    val group: String,
-    val modelExample: String,
-    val priceDelta: String
-)
-
-data class ProtectionRecommendationDto(
-    val packageName: String,
-    val reason: String
-) {
-    companion object {
-        fun from(recommendation: ProtectionRecommendation) = ProtectionRecommendationDto(
-            packageName = recommendation.packageName,
-            reason = recommendation.reason
-        )
-    }
-}
-

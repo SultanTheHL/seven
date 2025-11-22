@@ -5,6 +5,7 @@ import tools.jackson.databind.ObjectMapper
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.shared.model.GeoPoint
 import com.seven.seven.shared.model.WeatherCondition
+import com.seven.seven.shared.model.WeatherMetrics
 import com.seven.seven.shared.model.WeatherSeverity
 import com.seven.seven.shared.model.WeatherSnapshot
 import com.seven.seven.shared.model.WeatherType
@@ -23,7 +24,7 @@ class OpenWeatherClient(
 
     fun fetchSnapshots(points: List<GeoPoint>, travelInstant: Instant): List<WeatherSnapshot> {
         if (points.isEmpty()) return emptyList()
-        val sampledPoints = pointsToCheck(points)
+        val sampledPoints = points.distinct()
         return sampledPoints.mapNotNull { point ->
             runCatching { fetchSnapshot(point, travelInstant) }.getOrNull()
         }
@@ -62,6 +63,7 @@ class OpenWeatherClient(
         val type = weatherNode?.path("main")?.asText()?.toWeatherType() ?: WeatherType.UNKNOWN
 
         val severity = computeSeverity(type, closestNode)
+        val metrics = extractMetrics(weatherNode, closestNode)
 
         return WeatherSnapshot(
             point = point,
@@ -70,7 +72,38 @@ class OpenWeatherClient(
                 type = type,
                 severity = severity,
                 description = description
-            )
+            ),
+            metrics = metrics
+        )
+    }
+
+    private fun extractMetrics(weatherNode: JsonNode?, closestNode: JsonNode): WeatherMetrics {
+        val conditionId = weatherNode?.path("id")?.asInt() ?: 800
+        val temperature = closestNode.path("main").path("temp").asDouble(0.0)
+        val windSpeed = closestNode.path("wind").path("speed").asDouble(0.0)
+
+        val rainNode = closestNode.path("rain")
+        val snowNode = closestNode.path("snow")
+        val rain1h = when {
+            rainNode.has("1h") -> rainNode.path("1h").asDouble(0.0)
+            rainNode.has("3h") -> rainNode.path("3h").asDouble(0.0) / 3.0
+            else -> 0.0
+        }
+        val snow1h = when {
+            snowNode.has("1h") -> snowNode.path("1h").asDouble(0.0)
+            snowNode.has("3h") -> snowNode.path("3h").asDouble(0.0) / 3.0
+            else -> 0.0
+        }
+
+        val visibility = closestNode.path("visibility").asInt(10000)
+
+        return WeatherMetrics(
+            conditionId = conditionId,
+            temperatureCelsius = temperature,
+            windSpeedMetersPerSecond = windSpeed,
+            rainVolumeLastHour = rain1h,
+            snowVolumeLastHour = snow1h,
+            visibilityMeters = visibility
         )
     }
 
@@ -107,15 +140,6 @@ class OpenWeatherClient(
         "mist", "fog" -> WeatherType.FOG
         "squall", "tornado" -> WeatherType.EXTREME
         else -> WeatherType.UNKNOWN
-    }
-
-    private fun pointsToCheck(points: List<GeoPoint>): List<GeoPoint> {
-        val unique = points.distinct()
-        if (unique.size <= 3) return unique
-        val first = unique.first()
-        val middle = unique[unique.size / 2]
-        val last = unique.last()
-        return listOf(first, middle, last)
     }
 }
 

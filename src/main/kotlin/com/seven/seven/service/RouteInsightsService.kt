@@ -2,12 +2,14 @@ package com.seven.seven.service
 
 import com.seven.seven.external.GoogleDirectionsClient
 import com.seven.seven.external.GoogleElevationClient
-import com.seven.seven.external.GoogleRoadsClient
 import com.seven.seven.external.OpenWeatherClient
+import com.seven.seven.external.OverpassRoadClient
+import com.seven.seven.shared.model.ElevationSample
 import com.seven.seven.shared.model.GeoPoint
+import com.seven.seven.shared.model.RoadSegment
 import com.seven.seven.shared.model.RoadType
-import com.seven.seven.shared.model.RouteProfile
 import com.seven.seven.shared.model.WeatherCondition
+import com.seven.seven.shared.model.WeatherMetrics
 import com.seven.seven.shared.model.WeatherSeverity
 import com.seven.seven.shared.model.WeatherSnapshot
 import com.seven.seven.shared.model.WeatherType
@@ -18,24 +20,28 @@ import java.time.Instant
 class RouteInsightsService(
     private val directionsClient: GoogleDirectionsClient,
     private val elevationClient: GoogleElevationClient,
-    private val roadsClient: GoogleRoadsClient,
+    private val roadsClient: OverpassRoadClient,
     private val weatherClient: OpenWeatherClient
 ) {
 
-    fun buildProfile(request: RouteInsightsRequest): RouteProfile {
+    fun collectRouteContext(request: RouteInsightsRequest): RouteContext {
         val directions = directionsClient.fetchRoute(request.origin, request.destination, request.waypoints)
         val weatherPoints = listOf(request.origin) + request.waypoints + request.destination
 
         val elevationSamples = elevationClient.fetchSamples(directions.points)
-        val roadBreakdown = roadsClient.classifyRoads(directions.points).takeUnless { it.isEmpty() }
+        val roadData = roadsClient.classifyRoads(directions.points)
+        val roadBreakdown = roadData.breakdown.takeUnless { it.isEmpty() }
             ?: mapOf(RoadType.UNKNOWN to 1.0)
+        val roadSegments = roadData.segments.takeUnless { it.isEmpty() }
+            ?: directions.points.map { RoadSegment(it, RoadType.UNKNOWN, DEFAULT_SPEED_KPH) }
         val weatherSnapshots = weatherClient.fetchSnapshots(weatherPoints, request.travelInstant)
 
-        return RouteProfile(
-            totalDistanceMeters = directions.totalDistanceMeters,
+        return RouteContext(
+            directions = directions,
             elevationSamples = elevationSamples,
             roadBreakdown = roadBreakdown,
-            weatherSnapshots = ensureWeatherSnapshots(weatherSnapshots, request.travelInstant, weatherPoints)
+            representativeWeather = ensureWeatherSnapshots(weatherSnapshots, request.travelInstant, weatherPoints),
+            roadSegments = roadSegments
         )
     }
 
@@ -43,16 +49,24 @@ class RouteInsightsService(
         snapshots: List<WeatherSnapshot>,
         travelInstant: Instant,
         points: List<GeoPoint>
-    ): List<WeatherSnapshot> {
-        if (snapshots.isNotEmpty()) return snapshots
-        // fallback minimal stub to keep downstream logic working
-        return points.take(1).map {
-            WeatherSnapshot(
-                point = it,
-                instant = travelInstant,
-                condition = WeatherSnapshotFallback.condition
-            )
-        }
+    ): WeatherSnapshot {
+        val worstSnapshot = snapshots.maxByOrNull { calculateRiskScore(it) }
+        return worstSnapshot ?: WeatherSnapshot(
+            point = points.first(),
+            instant = travelInstant,
+            condition = WeatherSnapshotFallback.condition,
+            metrics = WeatherSnapshotFallback.metrics
+        )
+    }
+
+    private fun calculateRiskScore(snapshot: WeatherSnapshot): Double {
+        val metrics = snapshot.metrics
+        val severityScore = snapshot.condition.severity.weight * 100
+        val precipitationScore = (metrics.rainVolumeLastHour + metrics.snowVolumeLastHour) * 10
+        val windScore = metrics.windSpeedMetersPerSecond
+        val visibilityPenalty = (MAX_VISIBILITY_METERS - metrics.visibilityMeters)
+            .coerceAtLeast(0) / 100.0
+        return severityScore + precipitationScore + windScore + visibilityPenalty
     }
 
     data class RouteInsightsRequest(
@@ -62,12 +76,33 @@ class RouteInsightsService(
         val travelInstant: Instant
     )
 
+    data class RouteContext(
+        val directions: GoogleDirectionsClient.DirectionsData,
+        val elevationSamples: List<ElevationSample>,
+        val roadBreakdown: Map<RoadType, Double>,
+        val representativeWeather: WeatherSnapshot,
+        val roadSegments: List<RoadSegment>
+    )
+
     private object WeatherSnapshotFallback {
         val condition = WeatherCondition(
             type = WeatherType.CLEAR,
             severity = WeatherSeverity.LOW,
             description = "Clear (fallback)"
         )
+
+        val metrics = WeatherMetrics(
+            conditionId = 800,
+            temperatureCelsius = 20.0,
+            windSpeedMetersPerSecond = 2.0,
+            rainVolumeLastHour = 0.0,
+            snowVolumeLastHour = 0.0,
+            visibilityMeters = MAX_VISIBILITY_METERS
+        )
+    }
+    companion object {
+        private const val DEFAULT_SPEED_KPH = 50.0
+        private const val MAX_VISIBILITY_METERS = 10000
     }
 }
 
