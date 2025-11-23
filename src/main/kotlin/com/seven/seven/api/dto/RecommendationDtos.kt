@@ -1,6 +1,8 @@
 package com.seven.seven.api.dto
 
 import com.fasterxml.jackson.annotation.JsonAlias
+import com.fasterxml.jackson.annotation.JsonCreator
+import tools.jackson.databind.JsonNode
 import com.seven.seven.external.GeminiClient
 import com.seven.seven.ml.model.VehiclePayload
 import com.seven.seven.ml.model.VehicleAttributePayload
@@ -54,6 +56,27 @@ data class LocationDto(
     fun toLocationInput(): LocationInput {
         validate()
         return LocationInput.from(lat, lng, place)
+    }
+
+    companion object {
+        @JsonCreator
+        @JvmStatic
+        fun fromJson(node: JsonNode): LocationDto {
+            // Handle string input (e.g., "Berlin, Germany")
+            if (node.isTextual) {
+                return LocationDto(place = node.asText())
+            }
+            
+            // Handle object input (e.g., {"lat": 52.52, "lng": 13.40} or {"place": "Berlin, Germany"})
+            if (node.isObject) {
+                val lat = if (node.has("lat")) node.get("lat").asDouble() else null
+                val lng = if (node.has("lng")) node.get("lng").asDouble() else null
+                val place = if (node.has("place")) node.get("place").asText() else null
+                return LocationDto(lat = lat, lng = lng, place = place)
+            }
+            
+            throw IllegalArgumentException("LocationDto must be a string or an object with lat/lng or place")
+        }
     }
 }
 
@@ -114,7 +137,7 @@ data class VehicleDto(
     @JsonAlias("model_annex")
     val modelAnnex: String? = null,
     @JsonAlias("images")
-    val images: List<String> = emptyList(),
+    val images: List<String>? = emptyList(),
     @JsonAlias("tyre_type")
     val tyreType: String? = null,
     @JsonAlias("attributes")
@@ -142,7 +165,7 @@ data class VehicleDto(
         isExcitingDiscount = isExcitingDiscount ?: false,
         vehicleCostValueEur = vehicleCostValueEur ?: vehicleCost?.value ?: 0.0,
         modelAnnex = modelAnnex.orEmpty(),
-        images = images,
+        images = images.orEmpty(),
         tyreType = tyreType.orEmpty(),
         attributes = attributes.map { it.toPayload() },
         vehicleStatus = vehicleStatus.orEmpty(),

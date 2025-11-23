@@ -27,10 +27,12 @@ class MlRecommendationClient(
         
         logger.info("Calling ML recommendation service at {} with booking_id={}", uri, bookingId)
 
+        val wirePayload = payload.toWirePayload()
+
         return runCatching {
             val response = restClient.post()
                 .uri(uri)
-                .body(payload)
+                .body(wirePayload)
                 .retrieve()
                 .body(MlRecommendationResponse::class.java)
                 ?: throw ExternalApiException("ML service returned empty response")

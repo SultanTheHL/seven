@@ -41,6 +41,28 @@ class GeminiClient(
         return parsed ?: fallbackAdvantages(context)
     }
 
+    private fun sanitizeJsonCandidate(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        var sanitized = text.trim()
+        if (sanitized.startsWith("```json")) {
+            sanitized = sanitized.removePrefix("```json").trim()
+        } else if (sanitized.startsWith("```")) {
+            sanitized = sanitized.removePrefix("```").trim()
+        }
+        if (sanitized.endsWith("```")) {
+            sanitized = sanitized.removeSuffix("```").trim()
+        }
+        val firstDataIndex = sanitized.indexOfFirst { it == '{' || it == '[' }
+        if (firstDataIndex > 0) {
+            sanitized = sanitized.substring(firstDataIndex).trim()
+        }
+        val lastDataIndex = sanitized.indexOfLast { it == '}' || it == ']' }
+        if (lastDataIndex >= 0 && lastDataIndex < sanitized.length - 1) {
+            sanitized = sanitized.substring(0, lastDataIndex + 1).trim()
+        }
+        return sanitized
+    }
+
     fun generateProtectionFeedback(context: PromptContext): ProtectionFeedback {
         if (properties.gemini.apiKey.isBlank()) {
             logger.warn("Gemini API key missing. Using fallback protection feedback.")
@@ -91,13 +113,14 @@ class GeminiClient(
         if (body.isNullOrBlank()) return null
         return try {
             val root: JsonNode = objectMapper.readTree(body)
-            root.path("candidates")
+            val rawText = root.path("candidates")
                 .firstOrNull()
                 ?.path("content")
                 ?.path("parts")
                 ?.firstOrNull()
                 ?.path("text")
                 ?.asText()
+            sanitizeJsonCandidate(rawText)
         } catch (ex: Exception) {
             logger.warn("Failed to parse Gemini response: ${ex.message}")
             null
@@ -129,24 +152,35 @@ class GeminiClient(
 
     private fun fallbackAdvantages(context: PromptContext): List<VehicleAdvantage> {
         val standard = context.standardVehicle
-        val passengerPhrase = passengerNeedPhrase(context.personalInfo)
-        val luggagePhrase = luggageNeedPhrase(context.personalInfo)
-        val journeyPhrase = distancePhrase(context.personalInfo)
+        val info = context.personalInfo
+        val passengerPhrase = passengerNeedPhrase(info)
+        val luggagePhrase = luggageNeedPhrase(info)
+        val journeyPhrase = distancePhrase(info)
         val hazard = hazardSnippet(context)
+        val preferenceClause = preferenceHook(info)
+        val autoHook = automaticPreferenceHook(info)
+        val drivingHook = drivingSkillHook(info)
+        val needsAutomatic = info.automaticPreference > 0
 
         return context.superiorVehicles.map { vehicle ->
             val advantages = mutableListOf<String>()
             if (vehicle.passengersCount > standard.passengersCount) {
-                advantages += "Based on your travel party needs, ${vehicle.brand} ${vehicle.model} offers extra seating flexibility."
+                advantages += "$passengerPhrase, ${vehicle.brand} ${vehicle.model} adds the extra seating your group may need."
             }
             if (vehicle.bagsCount > standard.bagsCount) {
-                advantages += "Provides additional cargo space to handle ${luggagePhrase} without compromising cabin comfort."
+                advantages += "$luggagePhrase, it offers more cargo room without cramping passengers."
             }
             if (vehicle.isMoreLuxury && !standard.isMoreLuxury) {
-                advantages += "Delivers a higher-comfort trim that keeps ${journeyPhrase} relaxing for everyone onboard."
+                advantages += "$preferenceClause, this upgraded cabin keeps ${journeyPhrase} relaxing throughout the trip."
             }
             if (vehicle.vehicleCostValueEur > standard.vehicleCostValueEur) {
-                advantages += "Includes premium equipment that better protects occupants when facing $hazard."
+                advantages += "Given $hazard, its premium equipment keeps occupants better shielded than the standard car."
+            }
+            if (needsAutomatic && autoHook != null && vehicle.transmissionType?.contains("auto", true) == true) {
+                advantages += "Since $autoHook, this model delivers the automatic gearbox you asked for."
+            }
+            if (drivingHook != null) {
+                advantages += "Because $drivingHook, its recommended chassis tuning keeps the drive calm over ${journeyPhrase}."
             }
             if (advantages.isEmpty()) {
                 advantages += "Enhances your trip with greater comfort and stability tailored to $journeyPhrase."
@@ -193,15 +227,47 @@ class GeminiClient(
     }
 
     private fun passengerNeedPhrase(info: PersonalInfoPayload): String =
-        if (info.peopleCount >= 5) "your larger travel party" else "your passengers"
+        if (info.peopleCount > 1) "Because you're traveling with ${info.peopleCount} people" else "Because you're planning a solo itinerary"
 
     private fun luggageNeedPhrase(info: PersonalInfoPayload): String {
         val totalBags = info.luggageBigCount + info.luggageSmallCount
-        return if (totalBags >= 3) "multiple suitcases" else "your luggage"
+        return if (totalBags >= 3) "Since you're packing multiple suitcases" else "Since you're traveling light"
     }
 
     private fun distancePhrase(info: PersonalInfoPayload): String =
         if (info.tripLengthKm >= 200) "your long-distance itinerary" else "your city-focused journey"
+
+    private fun preferenceHook(info: PersonalInfoPayload): String =
+        info.preference.takeIf { it.isNotBlank() }?.let { "Because you selected the $it focus" }
+            ?: "Because you value overall comfort"
+
+    private fun automaticPreferenceHook(info: PersonalInfoPayload): String? = when (info.automaticPreference) {
+        2 -> "you require automatic transmission"
+        1 -> "you prefer automatic transmission"
+        else -> null
+    }
+
+    private fun drivingSkillHook(info: PersonalInfoPayload): String? = when (info.drivingSkills.lowercase()) {
+        "low" -> "you described yourself as a cautious driver"
+        "medium" -> "you mentioned moderate driving confidence"
+        "high" -> "you are a highly experienced driver"
+        else -> null
+    }
+
+    private fun preferenceSummary(context: PromptContext): String {
+        val info = context.personalInfo
+        val totalBags = info.luggageBigCount + info.luggageSmallCount
+        val luggageDescriptor = if (totalBags >= 3) "multiple suitcases" else "light luggage"
+        val autoSummary = when (info.automaticPreference) {
+            2 -> "requires automatic transmission"
+            1 -> "prefers automatic transmission"
+            else -> "is flexible on transmission"
+        }
+        val focus = info.preference.ifBlank { "unspecified" }
+        val driving = info.drivingSkills.ifBlank { "unspecified" }
+        val party = if (info.peopleCount > 1) "${info.peopleCount} travelers" else "solo trip"
+        return "Focus: $focus; Transmission: $autoSummary; Driving skills: $driving; Party: $party; Luggage: $luggageDescriptor."
+    }
 
     private fun buildVehiclePrompt(context: PromptContext): String {
         val standardJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(context.standardVehicle)
@@ -227,11 +293,15 @@ $personalJson
 MlRecommendationResponse (metrics):
 $mlJson
 
+User Preferences Summary:
+${preferenceSummary(context)}
+
 WRITING RULES:
 1. Start every advantage with a contextual hook such as "Based on your luggage requirements" or "Given the steep terrain on this trip".
 2. Explicitly tie each advantage to the renter's needs (party size, luggage, weather, slopes, trip length, vehicle preferences).
 3. Never quote raw numeric measurements from the input (e.g., do not mention exact degrees, m/s, or kilometers). Use qualitative phrases like "strong winds", "steep gradients", or "long-distance drive".
 4. Do not merely restate a spec; explain why the feature helps this specific journey.
+5. When referencing preferences, name them explicitly (e.g., "Because you selected the comfort focus" or "Since you prefer automatic transmissions").
 
 Return ONLY a JSON array. Each array entry must contain:
 {
@@ -264,6 +334,9 @@ $personalInfo
 
 MlRecommendationResponse JSON:
 $mlJson
+
+User Preferences Summary:
+${preferenceSummary(context)}
 
 PROTECTION PACKAGES:
 [
@@ -322,6 +395,7 @@ STYLE RULES:
 - Every sentence should begin with a hook such as "Based on your route analysis" or "Given the winds on your journey".
 - Do NOT repeat raw numeric measurements from the input (describe as "strong winds", "steep gradients", "long itinerary", etc.).
 - Keep reasons concise, factual, and tied to the packages' features.
+- When referencing driver or vehicle preferences, name them explicitly (e.g., "Because you selected the comfort focus..." or "Since you prefer automatic transmissions...").
 
 OUTPUT FORMAT:
 Return ONLY a JSON object:
