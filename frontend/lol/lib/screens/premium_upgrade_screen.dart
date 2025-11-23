@@ -122,7 +122,14 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverToBoxAdapter(child: _VehicleCard(vehicle: vehicles.last)),
+              sliver: SliverToBoxAdapter(
+                child: _VehicleCard(
+                  vehicle: vehicles.last,
+                  showPrice: false,
+                  showFeatures: false,
+                  onTap: () => Navigator.of(context).pushNamed('/protection'),
+                ),
+              ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
           ],
@@ -159,33 +166,7 @@ class _HeroCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: const [
-                Icon(Icons.check, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text('Keyless ignition', style: TextStyle(color: Colors.white)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: const [
-                Icon(Icons.check, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text('Built-in navigation', style: TextStyle(color: Colors.white)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(color: Colors.white24, thickness: 1),
-            const SizedBox(height: 8),
-            const Text(
-              '+ 10,51 US\$ /day',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 104),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
@@ -212,15 +193,25 @@ class _HeroCard extends StatelessWidget {
 }
 
 class _VehicleCard extends StatelessWidget {
-  const _VehicleCard({required this.vehicle});
+  const _VehicleCard({
+    required this.vehicle,
+    this.showPrice = true,
+    this.showFeatures = true,
+    this.onTap,
+  });
 
   final _Vehicle vehicle;
+  final bool showPrice;
+  final bool showFeatures;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [Color(0xFF050B14), Color(0xFF1F2634)],
@@ -297,41 +288,46 @@ class _VehicleCard extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ...vehicle.features.map(
-                    (feature) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.check, color: Colors.greenAccent, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            feature,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.white,
-                                ),
+            if (showFeatures || (showPrice && vehicle.pricePerDay.trim().isNotEmpty))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showFeatures)
+                      ...vehicle.features.map(
+                        (feature) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check, color: Colors.greenAccent, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                feature,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Colors.white,
+                                    ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    vehicle.pricePerDay,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
                         ),
-                  ),
-                ],
+                      ),
+                    if (showFeatures && showPrice && vehicle.pricePerDay.trim().isNotEmpty)
+                      const SizedBox(height: 8),
+                    if (showPrice && vehicle.pricePerDay.trim().isNotEmpty)
+                      Text(
+                        vehicle.pricePerDay,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -507,7 +503,18 @@ const _vehicles = [
     seatsLabel: '7',
     bagsLabel: '4',
     features: ['Panoramic roof', 'Matrix LED headlights'],
-    pricePerDay: '33,40',
+    pricePerDay: '33,40 EUR /day',
+  ),
+  _Vehicle(
+    name: 'Peugeot 408',
+    subtitle: 'Hybrid sedan',
+    imageUrl:
+        'https://vehicle-pictures-prod.orange.sixt.com/143210/1e1e1e/18_1.png',
+    mileageLabel: '~10k miles',
+    seatsLabel: '5',
+    bagsLabel: '0',
+    features: ['Keyless ignition', 'Bluetooth connectivity'],
+    pricePerDay: '',
   ),
 ];
 
