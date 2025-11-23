@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/recommendation_form_state.dart';
 import '../ui/app_colors.dart';
 import '../widgets/step_indicator.dart';
 
@@ -123,7 +124,13 @@ class _PassengerDetailsScreenState extends State<PassengerDetailsScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/luggage'),
+                  onPressed: () {
+                    RecommendationFormState.instance.updatePassengers(
+                      _passengers,
+                      _hasYoungChildren,
+                    );
+                    Navigator.of(context).pushNamed('/luggage');
+                  },
                   style: ButtonStyle(
                     backgroundColor: MaterialStateProperty.resolveWith(
                       (states) {

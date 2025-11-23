@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/recommendation_form_state.dart';
 import '../ui/app_colors.dart';
 import '../widgets/step_indicator.dart';
 
@@ -111,7 +112,13 @@ class _LuggageScreenState extends State<LuggageScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/priority'),
+                  onPressed: () {
+                    RecommendationFormState.instance.updateLuggage(
+                      large: _largeSuitcases,
+                      small: _smallBackpacks,
+                    );
+                    Navigator.of(context).pushNamed('/priority');
+                  },
                   style: ButtonStyle(
                     backgroundColor: MaterialStateProperty.resolveWith(
                       (states) {

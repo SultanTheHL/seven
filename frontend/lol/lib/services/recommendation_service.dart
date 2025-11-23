@@ -2,19 +2,63 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/recommendation_request.dart';
+
 class RecommendationService {
   const RecommendationService._();
 
   static const _endpoint = 'https://troll-engaged-cougar.ngrok-free.app/recommendation';
+  static RecommendationPayload? _latestPayload;
+
+  static RecommendationPayload? get latestPayload => _latestPayload;
 
   static Future<RecommendationPayload> fetchRecommendation() async {
     final uri = Uri.parse(_endpoint);
+    print('[RecommendationService] Requesting recommendations from $_endpoint');
     final response = await http.get(uri);
+    print('[RecommendationService] Response status: ${response.statusCode}');
     if (response.statusCode != 200) {
       throw Exception('Failed to load recommendation data');
     }
+    print('[RecommendationService] Received ${response.body.length} bytes.');
     final Map<String, dynamic> json = jsonDecode(response.body) as Map<String, dynamic>;
-    return RecommendationPayload.fromJson(json);
+    final payload = RecommendationPayload.fromJson(json);
+    _latestPayload = payload;
+    return payload;
+  }
+
+  static Future<RecommendationPayload> submitRecommendation(
+    RecommendationRequestDto request, {
+    String? bookingId,
+  }) async {
+    final bookingIdParam = bookingId ?? 'ENTER_BOOKING_ID';
+    final uri = Uri.parse(_endpoint).replace(
+      queryParameters: {'booking_id': bookingIdParam},
+    );
+    print('[RecommendationService] POST recommendation to $uri');
+    final formattedJson = const JsonEncoder.withIndent('  ').convert(request.toJson());
+    print('[RecommendationService] Request JSON:');
+    print(formattedJson);
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(request.toJson()),
+    );
+    print('[RecommendationService] POST status: ${response.statusCode}');
+    print('[RecommendationService] Response body length: ${response.body.length} bytes');
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(
+        'Recommendation POST failed: ${response.statusCode} ${response.body}',
+      );
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final payload = RecommendationPayload.fromJson(json);
+    _latestPayload = payload;
+    return payload;
+  }
+
+  static void cachePayload(RecommendationPayload payload) {
+    _latestPayload = payload;
   }
 }
 

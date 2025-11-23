@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/recommendation_service.dart';
+import '../state/recommendation_form_state.dart';
 import '../ui/app_colors.dart';
 import '../widgets/step_indicator.dart';
 
@@ -12,6 +14,35 @@ class ConfidenceScreen extends StatefulWidget {
 
 class _ConfidenceScreenState extends State<ConfidenceScreen> {
   int _selectedIndex = 0;
+  bool _submitting = false;
+  Future<void> _submit() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    RecommendationFormState.instance
+        .updateDrivingConfidence(_options[_selectedIndex].title);
+    try {
+      final dto = RecommendationFormState.instance.buildRequest();
+      final bookingId = RecommendationFormState.instance.bookingId;
+      final payload = await RecommendationService.submitRecommendation(
+        dto,
+        bookingId: bookingId,
+      );
+      RecommendationService.cachePayload(payload);
+      if (!mounted) return;
+      Navigator.of(context).pushNamed('/upgrades');
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to fetch recommendations: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
 
   static const List<_ConfidenceOption> _options = [
     _ConfidenceOption(
@@ -111,7 +142,7 @@ class _ConfidenceScreenState extends State<ConfidenceScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/upgrades'),
+                  onPressed: _submitting ? null : _submit,
                   style: ButtonStyle(
                     backgroundColor: MaterialStateProperty.resolveWith(
                       (states) {
@@ -139,7 +170,16 @@ class _ConfidenceScreenState extends State<ConfidenceScreen> {
                       ),
                     ),
                   ),
-                  child: const Text('Show me my cars'),
+                  child: _submitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Show me my cars'),
                 ),
               ),
             ],

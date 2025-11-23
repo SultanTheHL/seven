@@ -32,7 +32,9 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
 
   Future<void> _loadProtectionFeedback() async {
     try {
-      final payload = await RecommendationService.fetchRecommendation();
+      final cached = RecommendationService.latestPayload;
+      final payload =
+          cached ?? await RecommendationService.fetchRecommendation();
       final protection = payload.protectionFeedback;
       setState(() {
         _feedbackAll = _convertFeedback(protection.all);

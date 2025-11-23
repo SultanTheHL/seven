@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/recommendation_form_state.dart';
 import '../ui/app_colors.dart';
 import '../widgets/step_indicator.dart';
 
@@ -57,7 +58,11 @@ class _TripPlanScreenState extends State<TripPlanScreen> {
 
     final end = _endController.text.trim().isEmpty ? start : _endController.text.trim();
     final stops = _stopControllers.map((c) => c.text.trim()).where((c) => c.isNotEmpty).toList();
-    debugPrint('Trip start: $start, end: $end, stops: $stops');
+    RecommendationFormState.instance.updateTripPlan(
+      start: start,
+      end: end,
+      stops: stops,
+    );
     Navigator.of(context).pushNamed('/passengers');
   }
 
@@ -124,7 +129,7 @@ class _TripPlanScreenState extends State<TripPlanScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _TripField(
-                        label: 'Pickup city',
+                        label: 'Origin',
                         hint: 'e.g. Berlin',
                         controller: _startController,
                       ),
@@ -182,7 +187,7 @@ class _TripPlanScreenState extends State<TripPlanScreen> {
                       ],
                       const SizedBox(height: 20),
                       _TripField(
-                        label: 'Drop-off city (optional)',
+                        label: 'Destination (optional)',
                         hint: 'Leave empty if returning',
                         controller: _endController,
                       ),
