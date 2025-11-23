@@ -6,6 +6,8 @@ import 'screens/passenger_details_screen.dart';
 import 'screens/premium_upgrade_screen.dart';
 import 'screens/preference_screen.dart';
 import 'screens/priority_screen.dart';
+import 'screens/protection_confirmation_screen.dart';
+import 'screens/protection_package_screen.dart';
 import 'screens/trip_plan_screen.dart';
 import 'ui/app_colors.dart';
 
@@ -46,6 +48,8 @@ class MyApp extends StatelessWidget {
         '/passengers': (_) => const PassengerDetailsScreen(),
         '/preference': (_) => const PreferenceScreen(),
         '/upgrades': (_) => const PremiumUpgradeScreen(),
+        '/protection': (_) => const ProtectionPackageScreen(),
+        '/protection-confirmation': (_) => const ProtectionConfirmationScreen(),
       },
     );
   }
