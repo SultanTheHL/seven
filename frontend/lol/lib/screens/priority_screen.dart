@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/recommendation_form_state.dart';
 import '../ui/app_colors.dart';
 import '../widgets/step_indicator.dart';
 
@@ -141,7 +142,13 @@ class _PriorityScreenState extends State<PriorityScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/preference'),
+                  onPressed: () {
+                    final selectedLabels = _selected
+                        .map((index) => _options[index].label)
+                        .toList();
+                    RecommendationFormState.instance.updatePriorities(selectedLabels);
+                    Navigator.of(context).pushNamed('/preference');
+                  },
                   style: ButtonStyle(
                     backgroundColor: MaterialStateProperty.resolveWith(
                       (states) {

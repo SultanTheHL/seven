@@ -10,6 +10,7 @@ import 'screens/priority_screen.dart';
 import 'screens/protection_confirmation_screen.dart';
 import 'screens/protection_package_screen.dart';
 import 'screens/trip_plan_screen.dart';
+import 'screens/thank_you_screen.dart';
 import 'ui/app_colors.dart';
 
 void main() {
@@ -52,6 +53,7 @@ class MyApp extends StatelessWidget {
         '/protection': (_) => const ProtectionPackageScreen(),
         '/protection-confirmation': (_) => const ProtectionConfirmationScreen(),
         '/addons': (_) => const AddonsScreen(),
+        '/thank-you': (_) => const ThankYouScreen(),
       },
     );
   }

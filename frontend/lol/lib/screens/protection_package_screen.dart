@@ -20,6 +20,7 @@ class ProtectionPackageScreen extends StatefulWidget {
 class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
   int _selectedIndex = 0;
   final Map<int, bool> _expanded = {0: true};
+  final Map<int, bool> _feedbacksExpanded = {};
   List<_Feedback> _feedbackAll = const [];
   List<_Feedback> _feedbackSmart = const [];
   List<_Feedback> _feedbackBasic = const [];
@@ -32,7 +33,9 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
 
   Future<void> _loadProtectionFeedback() async {
     try {
-      final payload = await RecommendationService.fetchRecommendation();
+      final cached = RecommendationService.latestPayload;
+      final payload =
+          cached ?? await RecommendationService.fetchRecommendation();
       final protection = payload.protectionFeedback;
       setState(() {
         _feedbackAll = _convertFeedback(protection.all);
@@ -55,6 +58,12 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
   void _toggleExpand(int index) {
     setState(() {
       _expanded[index] = !(_expanded[index] ?? false);
+    });
+  }
+
+  void _toggleFeedbacksExpand(int index) {
+    setState(() {
+      _feedbacksExpanded[index] = !(_feedbacksExpanded[index] ?? false);
     });
   }
 
@@ -152,8 +161,10 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         ],
                         isSelected: _selectedIndex == 0,
                         isExpanded: _expanded[0] ?? false,
+                        isFeedbacksExpanded: _feedbacksExpanded[0] ?? false,
                         onSelect: () => _select(0),
                         onToggleExpand: () => _toggleExpand(0),
+                        onToggleFeedbacksExpand: () => _toggleFeedbacksExpand(0),
                       ),
                       const SizedBox(height: 16),
                       _ProtectionCard(
@@ -178,8 +189,10 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         ],
                         isSelected: _selectedIndex == 1,
                         isExpanded: _expanded[1] ?? false,
+                        isFeedbacksExpanded: _feedbacksExpanded[1] ?? false,
                         onSelect: () => _select(1),
                         onToggleExpand: () => _toggleExpand(1),
+                        onToggleFeedbacksExpand: () => _toggleFeedbacksExpand(1),
                       ),
                       const SizedBox(height: 16),
                       _ProtectionCard(
@@ -204,8 +217,10 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         ],
                         isSelected: _selectedIndex == 2,
                         isExpanded: _expanded[2] ?? false,
+                        isFeedbacksExpanded: _feedbacksExpanded[2] ?? false,
                         onSelect: () => _select(2),
                         onToggleExpand: () => _toggleExpand(2),
+                        onToggleFeedbacksExpand: () => _toggleFeedbacksExpand(2),
                       ),
                       const SizedBox(height: 16),
                       _ProtectionCard(
@@ -230,8 +245,10 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         ],
                         isSelected: _selectedIndex == 3,
                         isExpanded: _expanded[3] ?? false,
+                        isFeedbacksExpanded: _feedbacksExpanded[3] ?? false,
                         onSelect: () => _select(3),
                         onToggleExpand: () => _toggleExpand(3),
+                        onToggleFeedbacksExpand: () => _toggleFeedbacksExpand(3),
                       ),
                       const SizedBox(height: 24),
                     ],
@@ -341,8 +358,10 @@ class _ProtectionCard extends StatelessWidget {
     this.excludedFeatures = const [],
     required this.isSelected,
     required this.isExpanded,
+    required this.isFeedbacksExpanded,
     required this.onSelect,
     required this.onToggleExpand,
+    required this.onToggleFeedbacksExpand,
   });
 
   final int index;
@@ -360,8 +379,10 @@ class _ProtectionCard extends StatelessWidget {
   final List<String> excludedFeatures;
   final bool isSelected;
   final bool isExpanded;
+  final bool isFeedbacksExpanded;
   final VoidCallback onSelect;
   final VoidCallback onToggleExpand;
+  final VoidCallback onToggleFeedbacksExpand;
 
   @override
   Widget build(BuildContext context) {
@@ -424,18 +445,90 @@ class _ProtectionCard extends StatelessWidget {
                       ),
                       if (feedbacks.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        ...feedbacks.map(
-                          (feedback) => Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              feedback.text,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: feedback.isPositive ? Colors.green : Colors.red,
-                                    fontWeight: FontWeight.w500,
+                        if (isFeedbacksExpanded)
+                          // Показываем все feedbacks как отдельные абзацы
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ...feedbacks.map(
+                                (feedback) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Text(
+                                    feedback.text,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: feedback.isPositive ? Colors.green : Colors.red,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                   ),
-                            ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: onToggleFeedbacksExpand,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    '...',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 16,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              // Объединяем все feedbacks в один текст
+                              final allText = feedbacks.map((f) => f.text).join('\n');
+                              final textStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w500,
+                                  );
+                              
+                              // Проверяем, нужно ли показывать "..."
+                              final textSpan = TextSpan(
+                                text: allText,
+                                style: textStyle,
+                              );
+                              final textPainter = TextPainter(
+                                text: textSpan,
+                                maxLines: 2,
+                                textDirection: TextDirection.ltr,
+                              );
+                              textPainter.layout(maxWidth: constraints.maxWidth);
+                              final isTruncated = textPainter.didExceedMaxLines;
+                              
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    allText,
+                                    style: textStyle,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (isTruncated)
+                                    GestureDetector(
+                                      onTap: onToggleFeedbacksExpand,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Text(
+                                          '...',
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 16,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
-                        ),
                       ],
                       const SizedBox(height: 4),
                       Text(
@@ -446,13 +539,6 @@ class _ProtectionCard extends StatelessWidget {
                             ),
                       ),
                     ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: onToggleExpand,
-                  child: Icon(
-                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    color: AppColors.darkSubtleText,
                   ),
                 ),
               ],
@@ -493,19 +579,45 @@ class _ProtectionCard extends StatelessWidget {
             ),
             if (discount != null) ...[
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  discount!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      discount!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: onToggleExpand,
+                    child: Icon(
+                      isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: AppColors.darkSubtleText,
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: onToggleExpand,
+                    child: Icon(
+                      isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: AppColors.darkSubtleText,
+                    ),
+                  ),
+                ],
               ),
             ],
             if (isExpanded && (features.isNotEmpty || excludedFeatures.isNotEmpty)) ...[

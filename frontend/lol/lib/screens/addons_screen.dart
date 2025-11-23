@@ -13,16 +13,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
   int _selectedIndex = 0;
 
   static final List<_AddonOption> _options = [
-    _AddonOption(
-      title: 'Golden Plan',
-      subtitle: 'Best for most drivers',
-      features: const [
-        'Priority customer support',
-        'Roadside assistance',
-        'Full damage waiver',
-      ],
-      background: const Color(0x33FFC857),
-    ),
+    // Platinum Plan first
     _AddonOption(
       title: 'Platinum Plan',
       subtitle: 'Ultimate coverage bundle',
@@ -40,6 +31,18 @@ class _AddonsScreenState extends State<AddonsScreen> {
       ],
       background: const Color(0x33F8F7F3),
     ),
+    // Golden Plan second
+    _AddonOption(
+      title: 'Golden Plan',
+      subtitle: 'Best for most drivers',
+      features: const [
+        'Priority customer support',
+        'Roadside assistance',
+        'Full damage waiver',
+      ],
+      background: const Color(0x33FFC857),
+    ),
+    // No plan third
     _AddonOption(
       title: 'No plan',
       subtitle: 'Stick with the basics',
@@ -54,7 +57,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
   }
 
   void _finish(BuildContext context) {
-    Navigator.of(context).pushNamedAndRemoveUntil('/passengers', (route) => false);
+    Navigator.of(context).pushNamed('/thank-you');
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../state/recommendation_form_state.dart';
 import '../ui/app_colors.dart';
 import '../widgets/step_indicator.dart';
 
@@ -18,6 +19,7 @@ class _PreferenceScreenState extends State<PreferenceScreen> {
   }
 
   void _goNext(BuildContext context) {
+    RecommendationFormState.instance.updateTransmission(_selectedIndex);
     Navigator.of(context).pushNamed('/confidence');
   }
 

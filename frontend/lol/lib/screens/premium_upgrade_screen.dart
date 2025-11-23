@@ -17,26 +17,54 @@ class PremiumUpgradeScreen extends StatefulWidget {
 
 class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
   late Future<List<_Vehicle>> _vehiclesFuture;
+  late Future<_Vehicle?> _currentVehicleFuture;
 
   @override
   void initState() {
     super.initState();
     _vehiclesFuture = _loadVehicles();
+    _currentVehicleFuture = _loadCurrentVehicle();
   }
 
   Future<List<_Vehicle>> _loadVehicles() async {
+    print('[PremiumUpgrade] Requesting vehicle list from SIXT API...');
     final vehiclesFuture = _fetchVehiclesFromSixt();
-    RecommendationPayload? recommendation;
-    try {
-      recommendation = await RecommendationService.fetchRecommendation();
-    } catch (_) {
-      // ignore recommendation failure, fall back to base data
+    RecommendationPayload? recommendation = RecommendationService.latestPayload;
+    if (recommendation == null) {
+      try {
+        recommendation = await RecommendationService.fetchRecommendation();
+      } catch (_) {
+        // ignore recommendation failure, fall back to base data
+      }
     }
     final vehicles = await vehiclesFuture;
     if (recommendation == null || recommendation.vehicleRecommendations.isEmpty) {
       return vehicles;
     }
-    return _applyRecommendations(vehicles, recommendation.vehicleRecommendations);
+    final recommendedVehicles = _applyRecommendations(vehicles, recommendation.vehicleRecommendations);
+    // Only return vehicles that have a rank (are recommended by backend)
+    return recommendedVehicles.where((v) => v.rank != null).toList();
+  }
+
+  Future<_Vehicle?> _loadCurrentVehicle() async {
+    try {
+      final uri = Uri.parse(
+        'https://hackatum25.sixt.io/api/booking/${widget.bookingId}/vehicles',
+      );
+      final response = await http.get(uri);
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final vehicles = _Vehicle.fromApiResponse(json);
+        // Find OPEL ASTRA (id: 138cc34b-7c44-4a0d-aa4f-346d0780a68d)
+        return vehicles.firstWhere(
+          (v) => v.id == '138cc34b-7c44-4a0d-aa4f-346d0780a68d',
+          orElse: () => vehicles.isNotEmpty ? vehicles.first : throw Exception('No vehicles found'),
+        );
+      }
+    } catch (error) {
+      print('[PremiumUpgrade] Error fetching current vehicle: $error');
+    }
+    return null;
   }
 
   Future<List<_Vehicle>> _fetchVehiclesFromSixt() async {
@@ -45,14 +73,16 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
     );
     try {
       final response = await http.get(uri);
+      print('[PremiumUpgrade] SIXT response status: ${response.statusCode}');
       if (response.statusCode == 200) {
+        print('[PremiumUpgrade] Successfully fetched ${response.body.length} bytes.');
         return _Vehicle.fromApiResponse(jsonDecode(response.body));
       }
-    } catch (_) {
-      // fall through to fallback below
+      return [];
+    } catch (error) {
+      print('[PremiumUpgrade] Error fetching vehicles: $error');
+      return [];
     }
-    // fallback to locally defined mock data
-    return _vehicles;
   }
 
   List<_Vehicle> _applyRecommendations(
@@ -102,89 +132,106 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+            if (snapshot.hasError) {
               return _ErrorState(
-                onRetry: () => setState(() => _vehiclesFuture = _loadVehicles()),
+                onRetry: () => setState(() {
+                  _vehiclesFuture = _loadVehicles();
+                  _currentVehicleFuture = _loadCurrentVehicle();
+                }),
               );
             }
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
             final vehicles = snapshot.data!;
-            return CustomScrollView(
-              slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          icon: const Icon(Icons.arrow_back_ios_new),
-                          color: Colors.white,
-                          tooltip: 'Back',
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Select a premium upgrade now',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
+            return FutureBuilder<_Vehicle?>(
+              future: _currentVehicleFuture,
+              builder: (context, currentVehicleSnapshot) {
+                final currentVehicle = currentVehicleSnapshot.data;
+                return CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                IconButton(
+                                  onPressed: () => Navigator.of(context).maybePop(),
+                                  icon: const Icon(Icons.arrow_back_ios_new),
                                   color: Colors.white,
-                                  height: 1.1,
+                                  tooltip: 'Back',
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Select a premium upgrade now',
+                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          height: 1.1,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      sliver: SliverList.separated(
+                        itemCount: vehicles.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final vehicle = vehicles[index];
+                          return _VehicleCard(
+                            vehicle: vehicle,
+                            onTap: () => Navigator.of(context).pushNamed('/protection'),
+                          );
+                        },
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                        child: _HeroCard(onTap: () {}),
+                      ),
+                    ),
+                    if (currentVehicle != null) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                          child: Text(
+                            'OR CONTINUE WITH THE VEHICLE BELOW',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white.withOpacity(0.85),
+                                  letterSpacing: 0.5,
                                 ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              sliver: SliverList.separated(
-                itemCount: vehicles.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                itemBuilder: (context, index) {
-                  final vehicle = vehicles[index];
-                  return _VehicleCard(vehicle: vehicle);
-                },
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                child: _HeroCard(onTap: () {}),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                child: Text(
-                  'OR CONTINUE WITH THE VEHICLE BELOW',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white.withOpacity(0.85),
-                        letterSpacing: 0.5,
                       ),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverToBoxAdapter(
-                child: _VehicleCard(
-                  vehicle: vehicles.last,
-                  showPrice: false,
-                  showFeatures: false,
-                  onTap: () => Navigator.of(context).pushNamed('/protection'),
-                ),
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ],
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        sliver: SliverToBoxAdapter(
+                          child: _VehicleCard(
+                            vehicle: currentVehicle,
+                            showPrice: false,
+                            showFeatures: false,
+                            onTap: () => Navigator.of(context).pushNamed('/protection'),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -240,6 +287,101 @@ class _HeroCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedGradientText extends StatefulWidget {
+  const _AnimatedGradientText({
+    required this.text,
+    this.style,
+  });
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  State<_AnimatedGradientText> createState() => _AnimatedGradientTextState();
+}
+
+class _AnimatedGradientTextState extends State<_AnimatedGradientText>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 10),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (bounds) {
+            final t = _controller.value;
+            // Create a smooth continuous cycling gradient
+            // Pattern: white -> purple -> white (repeating seamlessly)
+            final speed = 0.5; // Скорость движения градиента
+            final offset = (t * speed) % 1.0;
+            
+            // More saturated purple color
+            const purple = Color(0xFF7B2CBF); // Более насыщенный фиолетовый
+            
+            // Create many color stops for smooth transitions
+            final stops = <double>[];
+            final colors = <Color>[];
+            
+            // Generate smooth gradient with many intermediate points
+            final numPoints = 30; // Больше точек = более плавный переход
+            for (int i = 0; i <= numPoints; i++) {
+              final pos = i / numPoints;
+              stops.add(pos);
+              
+              // Calculate position in the repeating pattern
+              // Pattern repeats every 0.5 (white->purple->white)
+              // Add offset to create sliding effect
+              final patternPos = ((pos + offset) % 0.5) / 0.5;
+              
+              if (patternPos < 0.5) {
+                // First half: white to purple (smooth transition)
+                final progress = patternPos * 2.0;
+                // Use smooth step function for very smooth transition
+                final smoothProgress = progress * progress * (3.0 - 2.0 * progress); // Smoothstep
+                colors.add(Color.lerp(Colors.white, purple, smoothProgress)!);
+              } else {
+                // Second half: purple to white (smooth transition)
+                final progress = (patternPos - 0.5) * 2.0;
+                // Use smooth step function for very smooth transition
+                final smoothProgress = progress * progress * (3.0 - 2.0 * progress); // Smoothstep
+                colors.add(Color.lerp(purple, Colors.white, smoothProgress)!);
+              }
+            }
+            
+            return LinearGradient(
+              colors: colors,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              stops: stops,
+            ).createShader(bounds);
+          },
+          child: Text(
+            widget.text,
+            style: widget.style,
+          ),
+        );
+      },
     );
   }
 }
@@ -386,8 +528,8 @@ class _VehicleCard extends StatelessWidget {
                       ),
                     if (vehicle.recommendationFeedbacks.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      Text(
-                        'What drivers say',
+                      _AnimatedGradientText(
+                        text: 'Our personalized feedback',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
@@ -622,57 +764,6 @@ class _ErrorState extends StatelessWidget {
     );
   }
 }
-
-const _vehicles = [
-  _Vehicle(
-    id: 'gmc-acadia',
-    name: 'GMC Acadia',
-    subtitle: '2.5 Turbo Elevation FWD',
-    imageUrl:
-        'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1100&q=80',
-    mileageLabel: '~19k miles',
-    seatsLabel: '8',
-    bagsLabel: '4',
-    features: ['Keyless ignition', 'Built-in navigation'],
-    pricePerDay: '12,58',
-  ),
-  _Vehicle(
-    id: 'bmw-series-4',
-    name: 'BMW Series 4',
-    subtitle: '430i xDrive Convertible',
-    imageUrl:
-        'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1100&q=80',
-    mileageLabel: '~2k miles',
-    seatsLabel: '4',
-    bagsLabel: '3',
-    features: ['Heated seats', 'Apple CarPlay'],
-    pricePerDay: '25,99',
-  ),
-  _Vehicle(
-    id: 'audi-q7',
-    name: 'Audi Q7',
-    subtitle: '55 TFSI quattro',
-    imageUrl:
-        'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=1100&q=80',
-    mileageLabel: '~8k miles',
-    seatsLabel: '7',
-    bagsLabel: '4',
-    features: ['Panoramic roof', 'Matrix LED headlights'],
-    pricePerDay: '33,40 EUR /day',
-  ),
-  _Vehicle(
-    id: 'peugeot-408',
-    name: 'Peugeot 408',
-    subtitle: 'Hybrid sedan',
-    imageUrl:
-        'https://vehicle-pictures-prod.orange.sixt.com/143210/1e1e1e/18_1.png',
-    mileageLabel: '~10k miles',
-    seatsLabel: '5',
-    bagsLabel: '0',
-    features: ['Keyless ignition', 'Bluetooth connectivity'],
-    pricePerDay: '',
-  ),
-];
 
 const _fallbackImage =
     'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1100&q=80';
