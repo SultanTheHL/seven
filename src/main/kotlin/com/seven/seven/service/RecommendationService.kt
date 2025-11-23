@@ -1,5 +1,6 @@
 package com.seven.seven.service
 
+import com.seven.seven.api.dto.VehicleDto
 import com.seven.seven.external.GeminiClient
 import com.seven.seven.ml.MlRecommendationClient
 import com.seven.seven.ml.model.MlRecommendationResponse
@@ -8,6 +9,7 @@ import com.seven.seven.ml.model.RoadCoordinatePayload
 import com.seven.seven.ml.model.VehiclePayload
 import com.seven.seven.shared.model.ElevationSample
 import com.seven.seven.shared.model.GeoPoint
+import com.seven.seven.shared.model.LocationInput
 import com.seven.seven.shared.model.RoadSegment
 import com.seven.seven.shared.model.RoadType
 import org.slf4j.LoggerFactory
@@ -19,7 +21,8 @@ import kotlin.math.ceil
 class RecommendationService(
     private val routeInsightsService: RouteInsightsService,
     private val mlRecommendationClient: MlRecommendationClient,
-    private val geminiClient: GeminiClient
+    private val geminiClient: GeminiClient,
+    private val sixtBookingService: SixtBookingService
 ) {
     private val logger = LoggerFactory.getLogger(RecommendationService::class.java)
 
@@ -60,14 +63,81 @@ class RecommendationService(
         logger.info("=== End ML Payload ===")
 
         val bookingId = command.bookingId ?: throw IllegalArgumentException("booking_id is required")
-        val mlResponse = mlRecommendationClient.requestRecommendation(payload, bookingId)
-        val selectedVehicleId = mlResponse.vehicles.minByOrNull { it.rank }?.id ?: DEFAULT_VEHICLE_PLACEHOLDER
 
-        val geminiResult = geminiClient.generateFeedback(selectedVehicleId)
-        return RecommendationResult(
-            id = geminiResult.id,
-            feedback = geminiResult.feedback
+        val mlResponse = mlRecommendationClient.requestRecommendation(payload, bookingId)
+
+        val bookingVehicles = loadBookingVehicles(bookingId)
+        val standardVehicle = resolveStandardVehicle(command.currentVehicle, bookingVehicles)
+        val superiorVehicles = resolveSuperiorVehicles(mlResponse, bookingVehicles, standardVehicle.id)
+            .distinctBy { it.id }
+
+        val promptContext = GeminiClient.PromptContext(
+            standardVehicle = standardVehicle,
+            superiorVehicles = superiorVehicles.take(TOP_SUPERIOR_VEHICLES),
+            personalInfo = payload,
+            mlResponse = mlResponse
         )
+
+        val vehicleFeedback = buildVehicleFeedback(
+            vehicleAdvantages = geminiClient.generateVehicleAdvantages(promptContext),
+            mlResponse = mlResponse,
+            fallbackVehicles = superiorVehicles
+        )
+
+        val protectionFeedback = geminiClient.generateProtectionFeedback(promptContext)
+
+        return RecommendationResult(
+            vehicles = vehicleFeedback,
+            protectionFeedback = protectionFeedback
+        )
+    }
+
+    private fun loadBookingVehicles(bookingId: String): List<VehicleDto> {
+        val vehicles = sixtBookingService.fetchVehicles(bookingId)
+        logger.info("Loaded ${vehicles.size} vehicles for booking $bookingId")
+        return vehicles
+    }
+
+    private fun resolveStandardVehicle(
+        currentVehicle: VehiclePayload?,
+        bookingVehicles: List<VehicleDto>
+    ): VehiclePayload {
+        if (currentVehicle != null) {
+            logger.info("Using current vehicle from request as standard: ${currentVehicle.id}")
+            return currentVehicle
+        }
+
+        val fallback = bookingVehicles.firstOrNull()?.toPayload()
+        if (fallback != null) {
+            logger.info("No current vehicle provided. Using first booking vehicle ${fallback.id} as standard.")
+            return fallback
+        }
+
+        logger.warn("No vehicles available to determine standard vehicle. Using default placeholder.")
+        return VehiclePayload()
+    }
+
+    private fun resolveSuperiorVehicles(
+        mlResponse: MlRecommendationResponse,
+        bookingVehicles: List<VehicleDto>,
+        standardVehicleId: String
+    ): List<VehiclePayload> {
+        val vehicleMap = bookingVehicles.mapNotNull { dto ->
+            dto.id?.let { id -> id to dto.toPayload() }
+        }.toMap()
+
+        val resolved = mlResponse.vehicles.mapNotNull { candidate ->
+            val payload = vehicleMap[candidate.id] ?: VehiclePayload(id = candidate.id)
+            payload.takeIf { it.id != standardVehicleId }
+        }
+
+        if (resolved.isEmpty()) {
+            logger.warn("No superior vehicles matched booking inventory; using placeholders from ML response.")
+            return mlResponse.vehicles.map { VehiclePayload(id = it.id) }
+                .filter { it.id != standardVehicleId }
+        }
+
+        return resolved
     }
 
     private fun buildPayload(
@@ -173,9 +243,9 @@ class RecommendationService(
     }
 
     data class RecommendationCommand(
-        val origin: GeoPoint,
-        val destination: GeoPoint,
-        val waypoints: List<GeoPoint>,
+        val origin: LocationInput,
+        val destination: LocationInput,
+        val waypoints: List<LocationInput>,
         val travelInstant: Instant,
         val peopleCount: Int,
         val luggageBigCount: Int,
@@ -188,16 +258,51 @@ class RecommendationService(
         val bookingId: String?
     )
 
+    private fun buildVehicleFeedback(
+        vehicleAdvantages: List<GeminiClient.VehicleAdvantage>,
+        mlResponse: MlRecommendationResponse,
+        fallbackVehicles: List<VehiclePayload>
+    ): List<VehicleFeedback> {
+        val rankMap = mlResponse.vehicles.associate { it.id to it.rank }
+
+        val mapped = vehicleAdvantages.map { advantage ->
+            VehicleFeedback(
+                vehicleId = advantage.vehicleId,
+                rank = rankMap[advantage.vehicleId] ?: Int.MAX_VALUE,
+                feedback = advantage.advantages.filter { it.isNotBlank() }
+            )
+        }.filter { it.feedback.isNotEmpty() }
+
+        if (mapped.isNotEmpty()) {
+            return mapped.sortedBy { it.rank }
+        }
+
+        logger.warn("Gemini returned no vehicle advantages; falling back to simple upgrade messaging.")
+        return fallbackVehicles.mapIndexed { index, vehicle ->
+            VehicleFeedback(
+                vehicleId = vehicle.id,
+                rank = rankMap[vehicle.id] ?: (index + 1),
+                feedback = listOf("Upgrade ${vehicle.brand} ${vehicle.model} offers additional comfort and features.")
+            )
+        }
+    }
+
     data class RecommendationResult(
-        val id: String,
-        val feedback: String
+        val vehicles: List<VehicleFeedback>,
+        val protectionFeedback: GeminiClient.ProtectionFeedback
+    )
+
+    data class VehicleFeedback(
+        val vehicleId: String,
+        val rank: Int,
+        val feedback: List<String>
     )
 
     companion object {
         private const val MAX_ROAD_COORDINATES = 50
         private const val DEFAULT_SPEED_KPH = 50.0
         private const val MPS_TO_KPH = 3.6
-        private const val DEFAULT_VEHICLE_PLACEHOLDER = "UNKNOWN"
+        private const val TOP_SUPERIOR_VEHICLES = 3
         private val ROAD_TYPE_SPEED_KPH = mapOf(
             RoadType.MOTORWAY to 120.0,
             RoadType.TRUNK to 100.0,

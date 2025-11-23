@@ -26,13 +26,12 @@ class RecommendationController(
         @RequestParam(name = "booking_id", required = false) bookingIdParam: String?
     ): RecommendationResponseDto {
         val preferences = request.preferences
-        // Use query parameter if provided, otherwise fall back to request body
         val bookingId = bookingIdParam ?: request.bookingId
         val recommendation = recommendationService.generate(
             RecommendationService.RecommendationCommand(
-                origin = request.originPoint(),
-                destination = request.destinationPoint(),
-                waypoints = request.waypointPoints(),
+                origin = request.originLocation(),
+                destination = request.destinationLocation(),
+                waypoints = request.waypointLocations(),
                 travelInstant = request.travelDate,
                 peopleCount = preferences.peopleCount,
                 luggageBigCount = preferences.luggageBigCount,

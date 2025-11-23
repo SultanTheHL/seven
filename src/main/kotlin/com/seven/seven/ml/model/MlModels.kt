@@ -175,12 +175,53 @@ data class VehiclePayload(
     @JsonProperty("is_exciting_discount")
     val isExcitingDiscount: Boolean = false,
     @JsonProperty("vehicle_cost_value_eur")
-    val vehicleCostValueEur: Double = 0.0
+    val vehicleCostValueEur: Double = 0.0,
+    @JsonProperty("model_annex")
+    val modelAnnex: String = "",
+    @JsonProperty("images")
+    val images: List<String> = emptyList(),
+    @JsonProperty("tyre_type")
+    val tyreType: String = "",
+    @JsonProperty("attributes")
+    val attributes: List<VehicleAttributePayload> = emptyList(),
+    @JsonProperty("vehicle_status")
+    val vehicleStatus: String = "",
+    @JsonProperty("vehicle_cost")
+    val vehicleCost: VehicleCostPayload? = null,
+    @JsonProperty("upsell_reasons")
+    val upsellReasons: List<UpsellReasonPayload> = emptyList()
 ) {
     companion object {
         const val ZERO_UUID = "00000000-0000-0000-0000-000000000000"
     }
 }
+
+data class VehicleAttributePayload(
+    @JsonProperty("key")
+    val key: String = "",
+    @JsonProperty("title")
+    val title: String = "",
+    @JsonProperty("value")
+    val value: String = "",
+    @JsonProperty("attribute_type")
+    val attributeType: String = "",
+    @JsonProperty("icon_url")
+    val iconUrl: String = ""
+)
+
+data class VehicleCostPayload(
+    @JsonProperty("currency")
+    val currency: String = "",
+    @JsonProperty("value")
+    val value: Double = 0.0
+)
+
+data class UpsellReasonPayload(
+    @JsonProperty("title")
+    val title: String = "",
+    @JsonProperty("description")
+    val description: String = ""
+)
 
 data class MlRecommendationResponse(
     @JsonProperty("highway_percent")

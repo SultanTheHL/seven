@@ -275,7 +275,8 @@ class Logic:
             {"id": str(vehicle.id), "rank": rank + 1}
             for rank, (vehicle, _) in enumerate(vehicle_scores)
         ]
-        
+        ranked_vehicles = ranked_vehicles[:3]
+
         return {
             "highway_percent": highway_percent,
             "max_slope": slope_metrics["max_slope"],

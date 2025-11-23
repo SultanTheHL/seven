@@ -2,6 +2,7 @@ package com.seven.seven.external
 
 import com.seven.seven.config.ExternalApiProperties
 import com.seven.seven.shared.model.GeoPoint
+import com.seven.seven.shared.model.LocationInput
 import com.seven.seven.shared.util.PolylineDecoder
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -17,7 +18,7 @@ class GoogleDirectionsClient(
 ) {
     private val logger = LoggerFactory.getLogger(GoogleDirectionsClient::class.java)
 
-    fun fetchRoute(origin: GeoPoint, destination: GeoPoint, waypoints: List<GeoPoint>): DirectionsData {
+    fun fetchRoute(origin: LocationInput, destination: LocationInput, waypoints: List<LocationInput>): DirectionsData {
         val apiKey = properties.google.apiKey
         logger.info("Making Google Directions API request with API key: ${if (apiKey.isNotBlank()) "SET (length: ${apiKey.length}, last 4: ${apiKey.takeLast(4)})" else "NOT SET - REQUEST WILL FAIL!"}")
 
@@ -74,12 +75,22 @@ class GoogleDirectionsClient(
         val legs = route.path("legs")
         val totalDistance = legs.sumOf { leg -> leg.path("distance").path("value").asDouble(0.0) }
         val totalDurationSeconds = legs.sumOf { leg -> leg.path("duration").path("value").asDouble(0.0) }
+        val startLocation = legs.firstOrNull()?.let { leg ->
+            val node = leg.path("start_location")
+            if (node.has("lat") && node.has("lng")) GeoPoint(node.path("lat").asDouble(), node.path("lng").asDouble()) else null
+        }
+        val endLocation = legs.lastOrNull()?.let { leg ->
+            val node = leg.path("end_location")
+            if (node.has("lat") && node.has("lng")) GeoPoint(node.path("lat").asDouble(), node.path("lng").asDouble()) else null
+        }
 
         return DirectionsData(
             polyline = overviewPolyline,
             points = decodedPoints,
             totalDistanceMeters = totalDistance,
-            totalDurationSeconds = totalDurationSeconds
+            totalDurationSeconds = totalDurationSeconds,
+            startLocation = startLocation,
+            endLocation = endLocation
         )
     }
 
@@ -87,9 +98,10 @@ class GoogleDirectionsClient(
         val polyline: String,
         val points: List<GeoPoint>,
         val totalDistanceMeters: Double,
-        val totalDurationSeconds: Double
+        val totalDurationSeconds: Double,
+        val startLocation: GeoPoint?,
+        val endLocation: GeoPoint?
     )
 
-    private fun GeoPoint.asQueryParam(): String = "${this.lat},${this.lng}"
 }
 
