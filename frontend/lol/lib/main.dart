@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/addons_screen.dart';
 import 'screens/confidence_screen.dart';
 import 'screens/luggage_screen.dart';
 import 'screens/passenger_details_screen.dart';
@@ -50,6 +51,7 @@ class MyApp extends StatelessWidget {
         '/upgrades': (_) => const PremiumUpgradeScreen(),
         '/protection': (_) => const ProtectionPackageScreen(),
         '/protection-confirmation': (_) => const ProtectionConfirmationScreen(),
+        '/addons': (_) => const AddonsScreen(),
       },
     );
   }

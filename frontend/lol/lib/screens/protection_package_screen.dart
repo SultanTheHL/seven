@@ -38,17 +38,17 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
         builder: (context) => _ConfirmationDialog(
           onBuy: () {
             Navigator.of(context).pop(); // Close dialog
-            Navigator.of(context).pushNamed('/protection-confirmation');
+            Navigator.of(context).pushNamed('/addons');
           },
           onNoThanks: () {
             Navigator.of(context).pop(); // Close dialog
-            Navigator.of(context).pushNamed('/protection-confirmation');
+            Navigator.of(context).pushNamed('/addons');
           },
         ),
       );
     } else {
       // All Inclusive Protection - proceed directly
-      Navigator.of(context).pushNamed('/protection-confirmation');
+      Navigator.of(context).pushNamed('/addons');
     }
   }
 
