@@ -189,7 +189,10 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 16),
                         itemBuilder: (context, index) {
                           final vehicle = vehicles[index];
-                          return _VehicleCard(vehicle: vehicle);
+                          return _VehicleCard(
+                            vehicle: vehicle,
+                            onTap: () => Navigator.of(context).pushNamed('/protection'),
+                          );
                         },
                       ),
                     ),
