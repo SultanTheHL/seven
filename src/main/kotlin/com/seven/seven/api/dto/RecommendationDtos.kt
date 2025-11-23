@@ -27,7 +27,9 @@ data class RecommendationRequestDto(
     val rentalDays: Int,
     @field:NotNull
     @field:Valid
-    val preferences: PreferencesDto
+    val preferences: PreferencesDto,
+    @JsonAlias("booking_id")
+    val bookingId: String? = null
 ) {
     fun originPoint(): GeoPoint = origin.toGeoPoint()
     fun destinationPoint(): GeoPoint = destination.toGeoPoint()

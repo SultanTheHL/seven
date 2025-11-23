@@ -1,8 +1,7 @@
 # main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from PersonalInfo import PersonalInfo  # Импортируем PersonalInfo
-from pydantic import BaseModel
 from logic import Logic
 
 app = FastAPI()
@@ -16,12 +15,16 @@ def say_hello(name: str):
     return {"message": f"Hello {name}"}
 
 @app.post("/vehicle-check")
-def vehicle_check(info: PersonalInfo):
-    # Generate ML recommendation response
+def vehicle_check(info: PersonalInfo, booking_id: str):
+    """Generate recommendation for provided PersonalInfo and booking."""
     logic = Logic()
-    return logic.generate_recommendation(info)
+    try:
+        return logic.generate_recommendation(info, booking_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 @app.get("/mama")
-def personal_info(info: PersonalInfo):
-    a = Logic()
-    a.test_metric(info)
+def personal_info():
+    return {"message": "Use /vehicle-check to evaluate vehicles"}
