@@ -1,9 +1,24 @@
 import math
+from typing import List
 from Vehicle import Vehicle
-from PersonalInfo import PersonalInfo
+from PersonalInfo import PersonalInfo, RoadCoordinate
 from metrics import Metrics
 
 class Logic:
+
+    def _extract_coord_values(self, coord):
+        """Return (lat, lon, elevation, speed) regardless of the source structure."""
+        if isinstance(coord, RoadCoordinate):
+            return coord.lat, coord.lon, coord.elevation, coord.speed
+
+        if isinstance(coord, dict):
+            return coord["lat"], coord["lon"], coord["elevation"], coord["speed"]
+
+        if isinstance(coord, (list, tuple)) and len(coord) == 4:
+            lat, lon, elevation, speed = coord
+            return lat, lon, elevation, speed
+
+        raise ValueError("Unsupported road coordinate format")
 
     # Haversine function to calculate distance (in meters)
     def haversine(self, lat1, lon1, lat2, lon2):
@@ -28,8 +43,8 @@ class Logic:
 
         for i in range(1, num_points):
             # Now unpack 4 elements (longitude, latitude, elevation, speed)
-            lat1, lon1, e1, _ = elevation_data[i - 1]  # Speed is ignored here
-            lat2, lon2, e2, _ = elevation_data[i]      # Speed is ignored here
+            lat1, lon1, e1, _ = self._extract_coord_values(elevation_data[i - 1])  # Speed is ignored here
+            lat2, lon2, e2, _ = self._extract_coord_values(elevation_data[i])      # Speed is ignored here
 
             distance = self.haversine(lat1, lon1, lat2, lon2)
             slope = (e2 - e1) / distance
@@ -73,7 +88,7 @@ class Logic:
         risk = 0
         trip_length_factor = min(trip_length_km / 100, 10)
         trip_time_factor = trip_length_hours
-        road_speed_factor = sum([coord[3] < 50 for coord in road_coordinates])
+        road_speed_factor = sum([self._extract_coord_values(coord)[3] < 50 for coord in road_coordinates])
         road_type_factor = road_speed_factor * 2
         risk += (trip_length_factor * 5) + (trip_time_factor * 0.5) + (road_type_factor)
         return risk
@@ -106,7 +121,7 @@ class Logic:
 
 
     # Function to calculate the percentage of highway and residential roads
-    def calculate_highway_and_residential_percent(road_coordinates):
+    def calculate_highway_and_residential_percent(self, road_coordinates):
         highway_count = 0
         residential_count = 0
         total_count = len(road_coordinates)
@@ -115,7 +130,7 @@ class Logic:
         residential_threshold = 60
 
         for coord in road_coordinates:
-            speed = coord[3]  # Extract the speed from the (longitude, latitude, elevation, speed) tuple
+            speed = self._extract_coord_values(coord)[3]  # Extract the speed value
             if speed >= highway_threshold:
                 highway_count += 1
             elif speed <= residential_threshold:
@@ -267,3 +282,46 @@ class Logic:
         for vehicle in self.vehicles:
             score = self.calculate_vehicle_score(vehicle, self.personal_info, self.create_metric())
             print(f"Vehicle: {vehicle.brand} {vehicle.model} - Score: {score}")
+
+    def generate_recommendation(self, personal_info: PersonalInfo, vehicles: List[Vehicle] = None):
+        """Generate ML recommendation response for given PersonalInfo and vehicles."""
+        if vehicles is None:
+            vehicles = self.vehicles
+        
+        # Calculate metrics
+        risk_score = self.calculate_risk(personal_info)
+        highway_percent, residential_percent = self.calculate_highway_and_residential_percent(personal_info.road_coordinates)
+        slope_metrics = self.calculate_slope_metrics(personal_info.road_coordinates)
+        
+        # Calculate scores for each vehicle and rank them
+        vehicle_scores = []
+        for vehicle in vehicles:
+            metrics = Metrics(
+                risk_score=risk_score,
+                highway_percent=highway_percent,
+                residential_road_percent=residential_percent,
+                max_slope=slope_metrics["max_slope"],
+                total_ascent=slope_metrics["total_ascent"],
+                total_descent=slope_metrics["total_descent"],
+                average_slope=slope_metrics["average_slope"],
+                total_distance=slope_metrics["total_distance"]
+            )
+            score = self.calculate_vehicle_score(vehicle, personal_info, metrics)
+            vehicle_scores.append((vehicle, score))
+        
+        # Sort by score (higher is better) and assign ranks
+        vehicle_scores.sort(key=lambda x: x[1], reverse=True)
+        ranked_vehicles = [
+            {"id": str(vehicle.id), "rank": rank + 1}
+            for rank, (vehicle, _) in enumerate(vehicle_scores)
+        ]
+        
+        return {
+            "highway_percent": highway_percent,
+            "max_slope": slope_metrics["max_slope"],
+            "total_ascent": slope_metrics["total_ascent"],
+            "total_descent": slope_metrics["total_descent"],
+            "average_slope": slope_metrics["average_slope"],
+            "risk_score": risk_score,
+            "vehicles": ranked_vehicles
+        }
