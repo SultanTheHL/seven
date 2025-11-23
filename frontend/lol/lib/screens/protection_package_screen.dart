@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/recommendation_service.dart';
 import '../ui/app_colors.dart';
 
 class _Feedback {
@@ -19,6 +20,37 @@ class ProtectionPackageScreen extends StatefulWidget {
 class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
   int _selectedIndex = 0;
   final Map<int, bool> _expanded = {0: true};
+  List<_Feedback> _feedbackAll = const [];
+  List<_Feedback> _feedbackSmart = const [];
+  List<_Feedback> _feedbackBasic = const [];
+  List<_Feedback> _feedbackNone = const [];
+  @override
+  void initState() {
+    super.initState();
+    _loadProtectionFeedback();
+  }
+
+  Future<void> _loadProtectionFeedback() async {
+    try {
+      final payload = await RecommendationService.fetchRecommendation();
+      final protection = payload.protectionFeedback;
+      setState(() {
+        _feedbackAll = _convertFeedback(protection.all);
+        _feedbackSmart = _convertFeedback(protection.smart);
+        _feedbackBasic = _convertFeedback(protection.basic);
+        _feedbackNone = _convertFeedback(protection.none);
+      });
+    } catch (_) {
+      // silently ignore, keep fallback lists empty
+    }
+  }
+
+  List<_Feedback> _convertFeedback(List<TypedFeedback> entries) {
+    if (entries.isEmpty) return const [];
+    return entries
+        .map((entry) => _Feedback(text: entry.text, isPositive: entry.isPositive))
+        .toList();
+  }
 
   void _toggleExpand(int index) {
     setState(() {
@@ -36,6 +68,7 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
       showDialog(
         context: context,
         builder: (context) => _ConfirmationDialog(
+          feedbacks: _feedbackAll,
           onBuy: () {
             Navigator.of(context).pop(); // Close dialog
             Navigator.of(context).pushNamed('/addons');
@@ -108,11 +141,8 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         price: '37,83 € / day',
                         originalPrice: '54,05 €/day',
                         discount: '- 30% online discount',
-                        feedbacks: const [
-                          _Feedback(text: 'Excellent coverage for peace of mind', isPositive: true),
-                          _Feedback(text: 'Most popular choice', isPositive: true),
-                        ],
-                        feedback: 'Recommended for long trips and high-value vehicles',
+                        feedbacks: _feedbackAll,
+                        feedback: null,
                         features: const [
                           'Loss damage waiver for collision damages, scratches, bumps and theft',
                           'Tyre and Windscreen Protection',
@@ -135,11 +165,8 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         price: '19,85 € / day',
                         originalPrice: '30,08€/day',
                         discount: '- 34% online discount',
-                        feedbacks: const [
-                          _Feedback(text: 'Good value for money', isPositive: true),
-                          _Feedback(text: 'Limited coverage compared to premium', isPositive: false),
-                        ],
-                        feedback: 'Best balance between cost and coverage',
+                        feedbacks: _feedbackSmart,
+                        feedback: null,
                         features: const [
                           'Loss damage waiver for collision damages, scratches, bumps and theft',
                           'Tyre and Windscreen Protection',
@@ -164,12 +191,8 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         price: '8,32 € / day',
                         originalPrice: null,
                         discount: null,
-                        feedbacks: const [
-                          _Feedback(text: 'Affordable option', isPositive: true),
-                          _Feedback(text: 'High deductible amount', isPositive: false),
-                          _Feedback(text: 'Limited protection features', isPositive: false),
-                        ],
-                        feedback: 'Suitable for short trips with low risk',
+                        feedbacks: _feedbackBasic,
+                        feedback: null,
                         features: const [
                           'Loss damage waiver for collision damages, scratches, bumps and theft',
                         ],
@@ -195,12 +218,8 @@ class _ProtectionPackageScreenState extends State<ProtectionPackageScreen> {
                         originalPrice: null,
                         discount: null,
                         includedText: 'Included',
-                        feedbacks: const [
-                          _Feedback(text: 'No additional cost', isPositive: true),
-                          _Feedback(text: 'Maximum financial risk', isPositive: false),
-                          _Feedback(text: 'Not recommended for expensive vehicles', isPositive: false),
-                        ],
-                        feedback: 'Only basic third-party insurance included',
+                        feedbacks: _feedbackNone,
+                        feedback: null,
                         features: const [],
                         excludedFeatures: const [
                           'Loss damage waiver for collision damages, scratches, bumps and theft',
@@ -569,10 +588,12 @@ class _ConfirmationDialog extends StatelessWidget {
   const _ConfirmationDialog({
     required this.onBuy,
     required this.onNoThanks,
+    required this.feedbacks,
   });
 
   final VoidCallback onBuy;
   final VoidCallback onNoThanks;
+  final List<_Feedback> feedbacks;
 
   @override
   Widget build(BuildContext context) {
@@ -630,28 +651,38 @@ class _ConfirmationDialog extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'Excellent coverage for peace of mind',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.green,
-                          fontWeight: FontWeight.w500,
+                  if (feedbacks.isEmpty)
+                    Text(
+                      'No live feedback available yet.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.darkSubtleText,
+                          ),
+                    )
+                  else
+                    ...feedbacks.map(
+                      (feedback) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              feedback.isPositive ? Icons.thumb_up : Icons.thumb_down,
+                              size: 16,
+                              color: feedback.isPositive ? Colors.green : Colors.redAccent,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                feedback.text,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: AppColors.darkBody,
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Most popular choice',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.green,
-                          fontWeight: FontWeight.w500,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Recommended for long trips and high-value vehicles',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.darkSubtleText,
-                        ),
-                  ),
+                      ),
+                    ),
                 ],
               ),
             ),

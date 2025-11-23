@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../services/recommendation_service.dart';
 import '../ui/app_colors.dart';
 
 class PremiumUpgradeScreen extends StatefulWidget {
@@ -20,10 +21,25 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
   @override
   void initState() {
     super.initState();
-    _vehiclesFuture = _fetchVehicles();
+    _vehiclesFuture = _loadVehicles();
   }
 
-  Future<List<_Vehicle>> _fetchVehicles() async {
+  Future<List<_Vehicle>> _loadVehicles() async {
+    final vehiclesFuture = _fetchVehiclesFromSixt();
+    RecommendationPayload? recommendation;
+    try {
+      recommendation = await RecommendationService.fetchRecommendation();
+    } catch (_) {
+      // ignore recommendation failure, fall back to base data
+    }
+    final vehicles = await vehiclesFuture;
+    if (recommendation == null || recommendation.vehicleRecommendations.isEmpty) {
+      return vehicles;
+    }
+    return _applyRecommendations(vehicles, recommendation.vehicleRecommendations);
+  }
+
+  Future<List<_Vehicle>> _fetchVehiclesFromSixt() async {
     final uri = Uri.parse(
       'https://hackatum25.sixt.io/api/booking/${widget.bookingId}/vehicles',
     );
@@ -39,6 +55,42 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
     return _vehicles;
   }
 
+  List<_Vehicle> _applyRecommendations(
+    List<_Vehicle> vehicles,
+    List<VehicleRecommendation> recommendations,
+  ) {
+    final recById = {
+      for (final rec in recommendations) rec.vehicleId: rec,
+    };
+
+    final originalIndex = {
+      for (var i = 0; i < vehicles.length; i++) vehicles[i].id: i,
+    };
+
+    final updatedVehicles = vehicles.map((vehicle) {
+      final rec = recById[vehicle.id];
+      if (rec == null) return vehicle;
+      return vehicle.copyWith(
+        rank: rec.rank,
+        recommendationFeedbacks: rec.feedback,
+      );
+    }).toList();
+
+    // sort by rank (lower rank first)
+    updatedVehicles.sort((a, b) {
+      final rankA = a.rank ?? 1 << 20;
+      final rankB = b.rank ?? 1 << 20;
+      if (rankA == rankB) {
+        final indexA = originalIndex[a.id] ?? 0;
+        final indexB = originalIndex[b.id] ?? 0;
+        return indexA.compareTo(indexB);
+      }
+      return rankA.compareTo(rankB);
+    });
+
+    return updatedVehicles;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -52,7 +104,7 @@ class _PremiumUpgradeScreenState extends State<PremiumUpgradeScreen> {
             }
             if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
               return _ErrorState(
-                onRetry: () => setState(() => _vehiclesFuture = _fetchVehicles()),
+                onRetry: () => setState(() => _vehiclesFuture = _loadVehicles()),
               );
             }
             final vehicles = snapshot.data!;
@@ -234,12 +286,20 @@ class _VehicleCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    vehicle.name,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          vehicle.name,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
+                      ),
+                      if (vehicle.rank != null)
+                        _RankBadge(rank: vehicle.rank!),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -288,7 +348,9 @@ class _VehicleCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (showFeatures || (showPrice && vehicle.pricePerDay.trim().isNotEmpty))
+            if (showFeatures ||
+                (showPrice && vehicle.pricePerDay.trim().isNotEmpty) ||
+                vehicle.recommendationFeedbacks.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 child: Column(
@@ -322,15 +384,48 @@ class _VehicleCard extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                             ),
                       ),
+                    if (vehicle.recommendationFeedbacks.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'What drivers say',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...vehicle.recommendationFeedbacks.map(
+                        (text) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.messenger_outline,
+                                  size: 16, color: Colors.white70),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  text,
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Colors.white70,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
           ],
         ),
       ),
-      ),
-    );
-  }
+    ),
+  );
+}
+
 }
 
 class _InfoChip extends StatelessWidget {
@@ -362,8 +457,34 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
+class _RankBadge extends StatelessWidget {
+  const _RankBadge({required this.rank});
+
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.primary),
+      ),
+      child: Text(
+        '#$rank',
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
+}
+
 class _Vehicle {
   const _Vehicle({
+    required this.id,
     required this.name,
     required this.subtitle,
     required this.imageUrl,
@@ -372,8 +493,11 @@ class _Vehicle {
     required this.seatsLabel,
     required this.bagsLabel,
     required this.pricePerDay,
+    this.rank,
+    this.recommendationFeedbacks = const [],
   });
 
+  final String id;
   final String name;
   final String subtitle;
   final String imageUrl;
@@ -382,6 +506,8 @@ class _Vehicle {
   final String seatsLabel;
   final String bagsLabel;
   final String pricePerDay;
+  final int? rank;
+  final List<String> recommendationFeedbacks;
 
   static List<_Vehicle> fromApiResponse(Map<String, dynamic> json) {
     final deals = json['deals'] as List<dynamic>? ?? [];
@@ -426,7 +552,13 @@ class _Vehicle {
           .map((e) => e.toString())
           .toList();
 
+      final id = vehicle['id']?.toString() ??
+          deal['vehicleId']?.toString() ??
+          vehicle['vin']?.toString() ??
+          (vehicle['model']?.toString() ?? '');
+
       return _Vehicle(
+        id: id,
         name: '${vehicle['brand'] ?? ''} ${vehicle['model'] ?? ''}'.trim(),
         subtitle: vehicle['modelAnnex']?.toString() ?? '',
         imageUrl: images.isNotEmpty ? images.first : _fallbackImage,
@@ -439,6 +571,26 @@ class _Vehicle {
         pricePerDay: '${prefix.trim()} $formattedPrice ${currency.toUpperCase()} $suffix',
       );
     }).toList();
+  }
+
+  _Vehicle copyWith({
+    int? rank,
+    List<String>? recommendationFeedbacks,
+  }) {
+    return _Vehicle(
+      id: id,
+      name: name,
+      subtitle: subtitle,
+      imageUrl: imageUrl,
+      features: features,
+      mileageLabel: mileageLabel,
+      seatsLabel: seatsLabel,
+      bagsLabel: bagsLabel,
+      pricePerDay: pricePerDay,
+      rank: rank ?? this.rank,
+      recommendationFeedbacks:
+          recommendationFeedbacks ?? this.recommendationFeedbacks,
+    );
   }
 }
 
@@ -473,6 +625,7 @@ class _ErrorState extends StatelessWidget {
 
 const _vehicles = [
   _Vehicle(
+    id: 'gmc-acadia',
     name: 'GMC Acadia',
     subtitle: '2.5 Turbo Elevation FWD',
     imageUrl:
@@ -484,6 +637,7 @@ const _vehicles = [
     pricePerDay: '12,58',
   ),
   _Vehicle(
+    id: 'bmw-series-4',
     name: 'BMW Series 4',
     subtitle: '430i xDrive Convertible',
     imageUrl:
@@ -495,6 +649,7 @@ const _vehicles = [
     pricePerDay: '25,99',
   ),
   _Vehicle(
+    id: 'audi-q7',
     name: 'Audi Q7',
     subtitle: '55 TFSI quattro',
     imageUrl:
@@ -506,6 +661,7 @@ const _vehicles = [
     pricePerDay: '33,40 EUR /day',
   ),
   _Vehicle(
+    id: 'peugeot-408',
     name: 'Peugeot 408',
     subtitle: 'Hybrid sedan',
     imageUrl:
