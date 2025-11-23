@@ -59,7 +59,8 @@ class RecommendationService(
         logger.info("parkingDifficulty: ${payload.parkingDifficulty}")
         logger.info("=== End ML Payload ===")
 
-        val mlResponse = mlRecommendationClient.requestRecommendation(payload)
+        val bookingId = command.bookingId ?: throw IllegalArgumentException("booking_id is required")
+        val mlResponse = mlRecommendationClient.requestRecommendation(payload, bookingId)
         val selectedVehicleId = mlResponse.vehicles.minByOrNull { it.rank }?.id ?: DEFAULT_VEHICLE_PLACEHOLDER
 
         val geminiResult = geminiClient.generateFeedback(selectedVehicleId)
@@ -183,7 +184,8 @@ class RecommendationService(
         val automaticPreference: Int,
         val drivingSkills: String,
         val currentVehicle: VehiclePayload?,
-        val rentalDays: Int
+        val rentalDays: Int,
+        val bookingId: String?
     )
 
     data class RecommendationResult(

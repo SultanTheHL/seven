@@ -1,8 +1,13 @@
 import math
+import uuid
 from typing import List
+
+import requests
 from Vehicle import Vehicle
 from PersonalInfo import PersonalInfo, RoadCoordinate
 from metrics import Metrics
+
+VEHICLE_API_URL = "https://hackatum25.sixt.io/api/booking/{booking_id}/vehicles"
 
 class Logic:
 
@@ -19,6 +24,59 @@ class Logic:
             return lat, lon, elevation, speed
 
         raise ValueError("Unsupported road coordinate format")
+
+    def _fetch_available_vehicles(self, booking_id: str) -> List[Vehicle]:
+        if not booking_id:
+            raise ValueError("booking_id is required to fetch vehicles")
+
+        url = VEHICLE_API_URL.format(booking_id=booking_id)
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise RuntimeError(f"Unable to fetch vehicles for booking {booking_id}") from exc
+
+        payload = response.json()
+        deals = payload.get("deals", [])
+        vehicles: List[Vehicle] = []
+
+        for deal in deals:
+            vehicle_payload = deal.get("vehicle")
+            if not vehicle_payload:
+                continue
+
+            vehicle_id = vehicle_payload.get("id")
+            if not vehicle_id:
+                continue
+
+            try:
+                vehicle = Vehicle(
+                    id=uuid.UUID(vehicle_id),
+                    brand=vehicle_payload.get("brand", ""),
+                    model=vehicle_payload.get("model", ""),
+                    acriss_code=vehicle_payload.get("acrissCode", ""),
+                    group_type=vehicle_payload.get("groupType", ""),
+                    transmission_type=vehicle_payload.get("transmissionType", ""),
+                    fuel_type=vehicle_payload.get("fuelType", ""),
+                    passengers_count=vehicle_payload.get("passengersCount", 0),
+                    bags_count=vehicle_payload.get("bagsCount", 0),
+                    is_new_car=vehicle_payload.get("isNewCar", False),
+                    is_recommended=vehicle_payload.get("isRecommended", False),
+                    is_more_luxury=vehicle_payload.get("isMoreLuxury", False),
+                    is_exciting_discount=vehicle_payload.get("isExcitingDiscount", False),
+                    vehicle_cost_value_eur=float(
+                        vehicle_payload.get("vehicleCost", {}).get("value", 0)
+                    ),
+                )
+                vehicles.append(vehicle)
+            except (ValueError, TypeError):
+                # Skip malformed vehicle entries
+                continue
+
+        if not vehicles:
+            raise ValueError(f"No vehicles returned for booking {booking_id}")
+
+        return vehicles
 
     # Haversine function to calculate distance (in meters)
     def haversine(self, lat1, lon1, lat2, lon2):
@@ -142,98 +200,6 @@ class Logic:
         return highway_percent, residential_road_percent
 
 
-    # Example data and usage
-    road_coordinates = [
-        (52.52001, 13.40494, 36.5, 120),  # Highway speed (120 km/h)
-        (52.52003, 13.40498, 36.5, 30),   # Residential road speed (30 km/h)
-        (52.5201, 13.4049, 36.4, 85),     # Highway speed (85 km/h)
-        (52.52016, 13.40481, 36.3, 25),   # Residential road speed (25 km/h)
-        (52.52004, 13.40464, 36.5, 40)    # Residential road speed (40 km/h)
-    ]
-
-    # Example data for hardcoded vehicles
-    vehicles = [
-        Vehicle(
-            id="1a1257a0-e495-43ff-b213-9786338e159b",
-            brand="VOLKSWAGEN",
-            model="GOLF",
-            acriss_code="CDAR",
-            group_type="SEDAN",
-            transmission_type="Automatic",
-            fuel_type="Petrol",
-            passengers_count=5,
-            bags_count=4,
-            is_new_car=True,
-            is_recommended=False,
-            is_more_luxury=False,
-            is_exciting_discount=True,
-            vehicle_cost_value_eur=36400
-        ),
-        Vehicle(
-            id="0bddecb3-202f-4281-8dcb-d41c1fbde6df",
-            brand="VOLKSWAGEN",
-            model="T-CROSS",
-            acriss_code="EFAR",
-            group_type="SUV",
-            transmission_type="Automatic",
-            fuel_type="Petrol",
-            passengers_count=5,
-            bags_count=4,
-            is_new_car=True,
-            is_recommended=True,
-            is_more_luxury=False,
-            is_exciting_discount=False,
-            vehicle_cost_value_eur=28800
-        )
-    ]
-
-    personal_info = PersonalInfo(
-        people_count=3,
-        language_big_count=1,
-        language_small_count=2,
-        road_coordinates=road_coordinates,
-        trip_length_km=150,
-        trip_length_hours=2,
-        condition_id=800,
-        temperature_c=-2,
-        wind_speed_mps=12.5,
-        rain_volume_1h=10,
-        snow_volume_1h=5,
-        visibility_m=100,
-        current_vehicle=vehicles[0],
-        preference="comfort",
-        automatic=1,
-        driving_skills="comfortable",
-        parking_difficulty=5
-    )
-    def create_metric(self):
-        # Calculate overall risk score for the user
-        risk_score = self.calculate_risk(self.personal_info)
-        print(f"Total Risk Score: {risk_score}")
-
-        # Calculate percentages for highway and residential roads
-        highway_percent, residential_percent = self.calculate_highway_and_residential_percent(self.road_coordinates)
-        print(f"Highway Road Percent: {highway_percent}%")
-        print(f"Residential Road Percent: {residential_percent}%")
-
-        # Calculate slope metrics
-        slope_metrics = self.calculate_slope_metrics(self.road_coordinates)
-        print(slope_metrics)
-
-        # Store all the metrics in the Metrics class
-        metrics = Metrics(risk_score=risk_score,
-                          highway_percent=highway_percent,
-                          residential_road_percent=residential_percent,
-                          max_slope=slope_metrics["max_slope"],
-                          total_ascent=slope_metrics["total_ascent"],
-                          total_descent=slope_metrics["total_descent"],
-                          average_slope=slope_metrics["average_slope"],
-                          total_distance=slope_metrics["total_distance"])
-
-        # Output the metrics
-        print(vars(metrics))
-        return metrics
-
     def calculate_vehicle_score(self, vehicle: Vehicle, personal_info: PersonalInfo, metrics: Metrics):
         score = 0
 
@@ -277,17 +243,11 @@ class Logic:
         return score
 
 
-    # Calculate scores for each vehicle
-    def test_metric(self):
-        for vehicle in self.vehicles:
-            score = self.calculate_vehicle_score(vehicle, self.personal_info, self.create_metric())
-            print(f"Vehicle: {vehicle.brand} {vehicle.model} - Score: {score}")
-
-    def generate_recommendation(self, personal_info: PersonalInfo, vehicles: List[Vehicle] = None):
-        """Generate ML recommendation response for given PersonalInfo and vehicles."""
+    def generate_recommendation(self, personal_info: PersonalInfo, booking_id: str, vehicles: List[Vehicle] = None):
+        """Generate ML recommendation response for given PersonalInfo and booking."""
         if vehicles is None:
-            vehicles = self.vehicles
-        
+            vehicles = self._fetch_available_vehicles(booking_id)
+
         # Calculate metrics
         risk_score = self.calculate_risk(personal_info)
         highway_percent, residential_percent = self.calculate_highway_and_residential_percent(personal_info.road_coordinates)

@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
@@ -20,8 +21,13 @@ class RecommendationController(
 
     @PostMapping
     @ResponseStatus(HttpStatus.OK)
-    fun recommend(@Valid @RequestBody request: RecommendationRequestDto): RecommendationResponseDto {
+    fun recommend(
+        @Valid @RequestBody request: RecommendationRequestDto,
+        @RequestParam(name = "booking_id", required = false) bookingIdParam: String?
+    ): RecommendationResponseDto {
         val preferences = request.preferences
+        // Use query parameter if provided, otherwise fall back to request body
+        val bookingId = bookingIdParam ?: request.bookingId
         val recommendation = recommendationService.generate(
             RecommendationService.RecommendationCommand(
                 origin = request.originPoint(),
@@ -35,7 +41,8 @@ class RecommendationController(
                 automaticPreference = preferences.automatic,
                 drivingSkills = preferences.drivingSkills,
                 currentVehicle = preferences.toVehiclePayload(),
-                rentalDays = request.rentalDays
+                rentalDays = request.rentalDays,
+                bookingId = bookingId
             )
         )
         return RecommendationResponseDto.from(recommendation)

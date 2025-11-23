@@ -8,6 +8,7 @@ import com.seven.seven.ml.model.PersonalInfoPayload
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
+import org.springframework.web.util.UriComponentsBuilder
 import java.net.URI
 
 @Component
@@ -18,9 +19,13 @@ class MlRecommendationClient(
 
     private val logger = LoggerFactory.getLogger(MlRecommendationClient::class.java)
 
-    fun requestRecommendation(payload: PersonalInfoPayload): MlRecommendationResponse {
-        val uri = URI.create(properties.ml.recommendationUrl)
-        logger.info("Calling ML recommendation service at {}", uri)
+    fun requestRecommendation(payload: PersonalInfoPayload, bookingId: String): MlRecommendationResponse {
+        val uri = UriComponentsBuilder.fromUriString(properties.ml.recommendationUrl)
+            .queryParam("booking_id", bookingId)
+            .build()
+            .toUri()
+        
+        logger.info("Calling ML recommendation service at {} with booking_id={}", uri, bookingId)
 
         return runCatching {
             val response = restClient.post()
