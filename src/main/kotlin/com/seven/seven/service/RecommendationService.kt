@@ -9,6 +9,7 @@ import com.seven.seven.ml.model.RoadCoordinatePayload
 import com.seven.seven.ml.model.VehiclePayload
 import com.seven.seven.shared.model.ElevationSample
 import com.seven.seven.shared.model.GeoPoint
+import com.seven.seven.shared.model.LocationInput
 import com.seven.seven.shared.model.RoadSegment
 import com.seven.seven.shared.model.RoadType
 import org.slf4j.LoggerFactory
@@ -77,9 +78,17 @@ class RecommendationService(
             mlResponse = mlResponse
         )
 
-        val advantages = geminiClient.generateAdvantages(promptContext)
+        val vehicleFeedback = buildVehicleFeedback(
+            vehicleAdvantages = geminiClient.generateVehicleAdvantages(promptContext),
+            mlResponse = mlResponse,
+            fallbackVehicles = superiorVehicles
+        )
+
+        val protectionFeedback = geminiClient.generateProtectionFeedback(promptContext)
+
         return RecommendationResult(
-            recommendations = advantages
+            vehicles = vehicleFeedback,
+            protectionFeedback = protectionFeedback
         )
     }
 
@@ -234,9 +243,9 @@ class RecommendationService(
     }
 
     data class RecommendationCommand(
-        val origin: GeoPoint,
-        val destination: GeoPoint,
-        val waypoints: List<GeoPoint>,
+        val origin: LocationInput,
+        val destination: LocationInput,
+        val waypoints: List<LocationInput>,
         val travelInstant: Instant,
         val peopleCount: Int,
         val luggageBigCount: Int,
@@ -249,8 +258,44 @@ class RecommendationService(
         val bookingId: String?
     )
 
+    private fun buildVehicleFeedback(
+        vehicleAdvantages: List<GeminiClient.VehicleAdvantage>,
+        mlResponse: MlRecommendationResponse,
+        fallbackVehicles: List<VehiclePayload>
+    ): List<VehicleFeedback> {
+        val rankMap = mlResponse.vehicles.associate { it.id to it.rank }
+
+        val mapped = vehicleAdvantages.map { advantage ->
+            VehicleFeedback(
+                vehicleId = advantage.vehicleId,
+                rank = rankMap[advantage.vehicleId] ?: Int.MAX_VALUE,
+                feedback = advantage.advantages.filter { it.isNotBlank() }
+            )
+        }.filter { it.feedback.isNotEmpty() }
+
+        if (mapped.isNotEmpty()) {
+            return mapped.sortedBy { it.rank }
+        }
+
+        logger.warn("Gemini returned no vehicle advantages; falling back to simple upgrade messaging.")
+        return fallbackVehicles.mapIndexed { index, vehicle ->
+            VehicleFeedback(
+                vehicleId = vehicle.id,
+                rank = rankMap[vehicle.id] ?: (index + 1),
+                feedback = listOf("Upgrade ${vehicle.brand} ${vehicle.model} offers additional comfort and features.")
+            )
+        }
+    }
+
     data class RecommendationResult(
-        val recommendations: List<GeminiClient.VehicleAdvantage>
+        val vehicles: List<VehicleFeedback>,
+        val protectionFeedback: GeminiClient.ProtectionFeedback
+    )
+
+    data class VehicleFeedback(
+        val vehicleId: String,
+        val rank: Int,
+        val feedback: List<String>
     )
 
     companion object {

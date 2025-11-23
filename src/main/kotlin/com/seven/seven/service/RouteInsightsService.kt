@@ -6,6 +6,7 @@ import com.seven.seven.external.OpenWeatherClient
 import com.seven.seven.external.OverpassRoadClient
 import com.seven.seven.shared.model.ElevationSample
 import com.seven.seven.shared.model.GeoPoint
+import com.seven.seven.shared.model.LocationInput
 import com.seven.seven.shared.model.RoadSegment
 import com.seven.seven.shared.model.RoadType
 import com.seven.seven.shared.model.WeatherCondition
@@ -26,7 +27,7 @@ class RouteInsightsService(
 
     fun collectRouteContext(request: RouteInsightsRequest): RouteContext {
         val directions = directionsClient.fetchRoute(request.origin, request.destination, request.waypoints)
-        val weatherPoints = listOf(request.origin) + request.waypoints + request.destination
+        val weatherPoints = deriveWeatherPoints(directions)
 
         val elevationSamples = elevationClient.fetchSamples(directions.points)
         val roadData = roadsClient.classifyRoads(directions.points)
@@ -70,9 +71,9 @@ class RouteInsightsService(
     }
 
     data class RouteInsightsRequest(
-        val origin: GeoPoint,
-        val destination: GeoPoint,
-        val waypoints: List<GeoPoint>,
+        val origin: LocationInput,
+        val destination: LocationInput,
+        val waypoints: List<LocationInput>,
         val travelInstant: Instant
     )
 
@@ -103,6 +104,22 @@ class RouteInsightsService(
     companion object {
         private const val DEFAULT_SPEED_KPH = 50.0
         private const val MAX_VISIBILITY_METERS = 10000
+    }
+
+    private fun deriveWeatherPoints(directions: GoogleDirectionsClient.DirectionsData): List<GeoPoint> {
+        val points = directions.points
+        if (points.isEmpty()) {
+            val fallback = directions.startLocation ?: directions.endLocation ?: GeoPoint(0.0, 0.0)
+            return listOf(fallback)
+        }
+
+        val candidates = mutableListOf<GeoPoint>()
+        candidates += (directions.startLocation ?: points.first())
+        if (points.size > 2) {
+            candidates += points[points.size / 2]
+        }
+        candidates += (directions.endLocation ?: points.last())
+        return candidates.distinct()
     }
 }
 

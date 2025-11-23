@@ -29,9 +29,9 @@ class RecommendationController(
         val bookingId = bookingIdParam ?: request.bookingId
         val recommendation = recommendationService.generate(
             RecommendationService.RecommendationCommand(
-                origin = request.originPoint(),
-                destination = request.destinationPoint(),
-                waypoints = request.waypointPoints(),
+                origin = request.originLocation(),
+                destination = request.destinationLocation(),
+                waypoints = request.waypointLocations(),
                 travelInstant = request.travelDate,
                 peopleCount = preferences.peopleCount,
                 luggageBigCount = preferences.luggageBigCount,
