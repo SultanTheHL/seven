@@ -2,6 +2,9 @@ package com.seven.seven.api.dto
 
 import com.fasterxml.jackson.annotation.JsonAlias
 import com.seven.seven.ml.model.VehiclePayload
+import com.seven.seven.ml.model.VehicleAttributePayload
+import com.seven.seven.ml.model.VehicleCostPayload
+import com.seven.seven.ml.model.UpsellReasonPayload
 import com.seven.seven.service.RecommendationService
 import com.seven.seven.shared.model.GeoPoint
 import jakarta.validation.Valid
@@ -96,7 +99,21 @@ data class VehicleDto(
     @JsonAlias("is_exciting_discount")
     val isExcitingDiscount: Boolean? = null,
     @JsonAlias("vehicle_cost_value_eur")
-    val vehicleCostValueEur: Double? = null
+    val vehicleCostValueEur: Double? = null,
+    @JsonAlias("model_annex")
+    val modelAnnex: String? = null,
+    @JsonAlias("images")
+    val images: List<String> = emptyList(),
+    @JsonAlias("tyre_type")
+    val tyreType: String? = null,
+    @JsonAlias("attributes")
+    val attributes: List<VehicleAttributeDto> = emptyList(),
+    @JsonAlias("vehicle_status")
+    val vehicleStatus: String? = null,
+    @JsonAlias("vehicle_cost")
+    val vehicleCost: VehicleCostDto? = null,
+    @JsonAlias("upsell_reasons")
+    val upsellReasons: List<UpsellReasonDto> = emptyList()
 ) {
     fun toPayload(): VehiclePayload = VehiclePayload(
         id = id ?: VehiclePayload.ZERO_UUID,
@@ -112,18 +129,73 @@ data class VehicleDto(
         isRecommended = isRecommended ?: false,
         isMoreLuxury = isMoreLuxury ?: false,
         isExcitingDiscount = isExcitingDiscount ?: false,
-        vehicleCostValueEur = vehicleCostValueEur ?: 0.0
+        vehicleCostValueEur = vehicleCostValueEur ?: vehicleCost?.value ?: 0.0,
+        modelAnnex = modelAnnex.orEmpty(),
+        images = images,
+        tyreType = tyreType.orEmpty(),
+        attributes = attributes.map { it.toPayload() },
+        vehicleStatus = vehicleStatus.orEmpty(),
+        vehicleCost = vehicleCost?.toPayload(),
+        upsellReasons = upsellReasons.map { it.toPayload() }
+    )
+}
+
+data class VehicleAttributeDto(
+    @JsonAlias("key")
+    val key: String = "",
+    @JsonAlias("title")
+    val title: String = "",
+    @JsonAlias("value")
+    val value: String = "",
+    @JsonAlias("attribute_type")
+    val attributeType: String = "",
+    @JsonAlias("icon_url")
+    val iconUrl: String? = null
+) {
+    fun toPayload(): VehicleAttributePayload = VehicleAttributePayload(
+        key = key,
+        title = title,
+        value = value,
+        attributeType = attributeType,
+        iconUrl = iconUrl.orEmpty()
+    )
+}
+
+data class VehicleCostDto(
+    @JsonAlias("currency")
+    val currency: String = "",
+    @JsonAlias("value")
+    val value: Double = 0.0
+) {
+    fun toPayload(): VehicleCostPayload = VehicleCostPayload(
+        currency = currency,
+        value = value
+    )
+}
+
+data class UpsellReasonDto(
+    @JsonAlias("title")
+    val title: String = "",
+    @JsonAlias("description")
+    val description: String = ""
+) {
+    fun toPayload(): UpsellReasonPayload = UpsellReasonPayload(
+        title = title,
+        description = description
     )
 }
 
 data class RecommendationResponseDto(
-    val vehicleId: String,
-    val feedback: String
+    val recommendations: List<VehicleAdvantageDto>
 ) {
     companion object {
         fun from(result: RecommendationService.RecommendationResult) = RecommendationResponseDto(
-            vehicleId = result.id,
-            feedback = result.feedback
+            recommendations = result.recommendations.map { VehicleAdvantageDto(it.vehicleId, it.advantages) }
         )
     }
 }
+
+data class VehicleAdvantageDto(
+    val vehicleId: String,
+    val advantages: List<String>
+)

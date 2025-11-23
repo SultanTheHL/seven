@@ -26,7 +26,6 @@ class RecommendationController(
         @RequestParam(name = "booking_id", required = false) bookingIdParam: String?
     ): RecommendationResponseDto {
         val preferences = request.preferences
-        // Use query parameter if provided, otherwise fall back to request body
         val bookingId = bookingIdParam ?: request.bookingId
         val recommendation = recommendationService.generate(
             RecommendationService.RecommendationCommand(

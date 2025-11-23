@@ -12,6 +12,7 @@ class ExternalApiProperties {
     var ml: Ml = Ml()
     var overpass: Overpass = Overpass()
     var gemini: Gemini = Gemini()
+    var sixt: Sixt = Sixt()
     
     private val logger = LoggerFactory.getLogger(ExternalApiProperties::class.java)
 
@@ -163,6 +164,7 @@ class ExternalApiProperties {
         logger.info("Final Weather API Key: ${if (weather.apiKey.isNotBlank()) "SET (length: ${weather.apiKey.length}, last 4: ${weather.apiKey.takeLast(4)})" else "NOT SET - THIS WILL CAUSE ERRORS!"}")
         logger.info("ML recommendation endpoint: ${ml.recommendationUrl}")
         logger.info("Gemini API Key configured: ${if (gemini.apiKey.isNotBlank()) "YES" else "NO"}")
+        logger.info("Sixt booking base url: ${sixt.bookingBaseUrl}")
         logger.info("=== End External API Properties Initialization ===")
     }
 
@@ -188,6 +190,10 @@ class ExternalApiProperties {
     class Gemini {
         var apiKey: String = ""
         var model: String = "gemini-2.5-flash"
+    }
+
+    class Sixt {
+        var bookingBaseUrl: String = "https://hackatum25.sixt.io/api"
     }
 
     companion object {
