@@ -1,7 +1,8 @@
 package com.seven.seven.api.dto
 
-import com.seven.seven.ml.model.MlRecommendationResponse
+import com.fasterxml.jackson.annotation.JsonAlias
 import com.seven.seven.ml.model.VehiclePayload
+import com.seven.seven.service.RecommendationService
 import com.seven.seven.shared.model.GeoPoint
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
@@ -42,10 +43,13 @@ data class CoordinateDto(
 
 data class PreferencesDto(
     @field:Min(1)
+    @JsonAlias("people_count")
     val peopleCount: Int,
     @field:Min(0)
+    @JsonAlias("luggage_big_count")
     val luggageBigCount: Int,
     @field:Min(0)
+    @JsonAlias("luggage_small_count")
     val luggageSmallCount: Int,
     @field:NotBlank
     val preference: String,
@@ -53,44 +57,60 @@ data class PreferencesDto(
     @field:Max(2)
     val automatic: Int,
     @field:NotBlank
+    @JsonAlias("driving_skills")
     val drivingSkills: String,
     @field:Valid
+    @JsonAlias("current_vehicle")
     val currentVehicle: VehicleDto? = null
 ) {
     fun toVehiclePayload(): VehiclePayload? = currentVehicle?.toPayload()
 }
 
 data class VehicleDto(
+    @JsonAlias("id")
     val id: String? = null,
+    @JsonAlias("brand")
     val brand: String? = null,
+    @JsonAlias("model")
     val model: String? = null,
+    @JsonAlias("acriss_code")
     val acrissCode: String? = null,
+    @JsonAlias("group_type")
     val groupType: String? = null,
+    @JsonAlias("transmission_type")
     val transmissionType: String? = null,
+    @JsonAlias("fuel_type")
     val fuelType: String? = null,
+    @JsonAlias("passengers_count")
     val passengersCount: Int? = null,
+    @JsonAlias("bags_count")
     val bagsCount: Int? = null,
+    @JsonAlias("is_new_car")
     val isNewCar: Boolean? = null,
+    @JsonAlias("is_recommended")
     val isRecommended: Boolean? = null,
+    @JsonAlias("is_more_luxury")
     val isMoreLuxury: Boolean? = null,
+    @JsonAlias("is_exciting_discount")
     val isExcitingDiscount: Boolean? = null,
+    @JsonAlias("vehicle_cost_value_eur")
     val vehicleCostValueEur: Double? = null
 ) {
     fun toPayload(): VehiclePayload = VehiclePayload(
-        id = id,
-        brand = brand,
-        model = model,
-        acrissCode = acrissCode,
-        groupType = groupType,
-        transmissionType = transmissionType,
-        fuelType = fuelType,
-        passengersCount = passengersCount,
-        bagsCount = bagsCount,
-        isNewCar = isNewCar,
-        isRecommended = isRecommended,
-        isMoreLuxury = isMoreLuxury,
-        isExcitingDiscount = isExcitingDiscount,
-        vehicleCostValueEur = vehicleCostValueEur
+        id = id ?: VehiclePayload.ZERO_UUID,
+        brand = brand.orEmpty(),
+        model = model.orEmpty(),
+        acrissCode = acrissCode.orEmpty(),
+        groupType = groupType.orEmpty(),
+        transmissionType = transmissionType.orEmpty(),
+        fuelType = fuelType.orEmpty(),
+        passengersCount = passengersCount ?: 0,
+        bagsCount = bagsCount ?: 0,
+        isNewCar = isNewCar ?: false,
+        isRecommended = isRecommended ?: false,
+        isMoreLuxury = isMoreLuxury ?: false,
+        isExcitingDiscount = isExcitingDiscount ?: false,
+        vehicleCostValueEur = vehicleCostValueEur ?: 0.0
     )
 }
 
@@ -99,9 +119,9 @@ data class RecommendationResponseDto(
     val feedback: String
 ) {
     companion object {
-        fun from(response: MlRecommendationResponse) = RecommendationResponseDto(
-            vehicleId = response.vehicleId,
-            feedback = response.feedback
+        fun from(result: RecommendationService.RecommendationResult) = RecommendationResponseDto(
+            vehicleId = result.id,
+            feedback = result.feedback
         )
     }
 }

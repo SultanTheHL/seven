@@ -1,5 +1,6 @@
 package com.seven.seven.service
 
+import com.seven.seven.external.GeminiClient
 import com.seven.seven.ml.MlRecommendationClient
 import com.seven.seven.ml.model.MlRecommendationResponse
 import com.seven.seven.ml.model.PersonalInfoPayload
@@ -17,11 +18,12 @@ import kotlin.math.ceil
 @Service
 class RecommendationService(
     private val routeInsightsService: RouteInsightsService,
-    private val mlRecommendationClient: MlRecommendationClient
+    private val mlRecommendationClient: MlRecommendationClient,
+    private val geminiClient: GeminiClient
 ) {
     private val logger = LoggerFactory.getLogger(RecommendationService::class.java)
 
-    fun generate(command: RecommendationCommand): MlRecommendationResponse {
+    fun generate(command: RecommendationCommand): RecommendationResult {
         val context = routeInsightsService.collectRouteContext(
             RouteInsightsService.RouteInsightsRequest(
                 origin = command.origin,
@@ -57,8 +59,14 @@ class RecommendationService(
         logger.info("parkingDifficulty: ${payload.parkingDifficulty}")
         logger.info("=== End ML Payload ===")
 
-        //return mlRecommendationClient.requestRecommendation(payload)
-        return MlRecommendationResponse("a", "1")
+        val mlResponse = mlRecommendationClient.requestRecommendation(payload)
+        val selectedVehicleId = mlResponse.vehicles.minByOrNull { it.rank }?.id ?: DEFAULT_VEHICLE_PLACEHOLDER
+
+        val geminiResult = geminiClient.generateFeedback(selectedVehicleId)
+        return RecommendationResult(
+            id = geminiResult.id,
+            feedback = geminiResult.feedback
+        )
     }
 
     private fun buildPayload(
@@ -178,10 +186,16 @@ class RecommendationService(
         val rentalDays: Int
     )
 
+    data class RecommendationResult(
+        val id: String,
+        val feedback: String
+    )
+
     companion object {
         private const val MAX_ROAD_COORDINATES = 50
         private const val DEFAULT_SPEED_KPH = 50.0
         private const val MPS_TO_KPH = 3.6
+        private const val DEFAULT_VEHICLE_PLACEHOLDER = "UNKNOWN"
         private val ROAD_TYPE_SPEED_KPH = mapOf(
             RoadType.MOTORWAY to 120.0,
             RoadType.TRUNK to 100.0,

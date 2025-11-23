@@ -1,18 +1,26 @@
 # PersonalInfo.py
 
 from __future__ import annotations  # Это нужно для Forward Reference
-from typing import List, Tuple
-from pydantic import BaseModel
+from typing import List, Tuple, Union, Any
+from pydantic import BaseModel, field_validator
 import uuid
 
 # Импортируем Vehicle
 from Vehicle import Vehicle  # Убедитесь, что Vehicle.py и PersonalInfo.py находятся в одной директории
 
+
+class RoadCoordinate(BaseModel):
+    lon: float
+    lat: float
+    elevation: float
+    speed: float
+
+
 class PersonalInfo(BaseModel):
     people_count: int
     language_big_count: int
     language_small_count: int
-    road_coordinates: List[Tuple[float, float, float, float]]  # (longitude, latitude, elevation, speed)
+    road_coordinates: List[RoadCoordinate]  # Accepts dicts (auto-converted) or tuples (via validator)
     trip_length_km: float
     trip_length_hours: int
     condition_id: int  # Crucial: 800=Clear, 6xx=Snow, 2xx=Thunderstorm
@@ -26,6 +34,31 @@ class PersonalInfo(BaseModel):
     automatic: int  # 0 - manual, 1 - automatic, 2 - i don't mind
     driving_skills: str  # comfortable, extra_safety, condition-specific
     parking_difficulty: int  # 0-10
+
+    @field_validator('road_coordinates', mode='before')
+    @classmethod
+    def validate_road_coordinates(cls, v: Any) -> List[Any]:
+        """Convert tuples to dicts for RoadCoordinate parsing. Dicts pass through unchanged."""
+        if isinstance(v, list):
+            result = []
+            for coord in v:
+                # If it's already a dict, keep it as is (Pydantic will parse it as RoadCoordinate)
+                if isinstance(coord, dict):
+                    result.append(coord)
+                # If it's a tuple/list, convert to dict
+                # Format: (lat, lon, elevation, speed) based on example data
+                elif isinstance(coord, (list, tuple)) and len(coord) == 4:
+                    result.append({
+                        "lat": coord[0],
+                        "lon": coord[1],
+                        "elevation": coord[2],
+                        "speed": coord[3]
+                    })
+                else:
+                    # Already a RoadCoordinate or other format, pass through
+                    result.append(coord)
+            return result
+        return v
 
     def get_risk_multiplier(self) -> float:
         # Группа 6xx: Снег (Критически)
